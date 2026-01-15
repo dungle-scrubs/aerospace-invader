@@ -111,10 +111,6 @@ Create `~/.config/aerospace-invader/config.json` to customize hotkeys:
 
 **Supported keys:** `a-z`, `0-9`, `.`, `,`, `/`, `;`, `'`, `[`, `]`, `\`, `-`, `=`, `` ` ``, `space`, `return`, `tab`, `escape`, `delete`, `left`, `right`, `up`, `down`
 
-## Known Limitations
-
-- **No graceful error handling** - If AeroSpace isn't installed, failures are silent in some code paths.
-
 ## Development
 
 ```bash
@@ -152,5 +148,4 @@ MIT
 
 ## Roadmap
 
-- [ ] Better error handling and user feedback when AeroSpace is missing
 - [ ] Add `--help` and `--version` flags
