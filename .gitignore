@@ -1,9 +1,11 @@
 # Compiled binaries
-aerospace-invader
-aerospace-ui
+/aerospace-invader
 
 # Logs
 logs/
+
+# Claude Code
+.claude/
 
 # macOS
 .DS_Store
