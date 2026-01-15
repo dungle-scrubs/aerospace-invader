@@ -15,9 +15,11 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     public func applicationDidFinishLaunching(_ notification: Notification) {
         // Ensure aerospace is running (except for hide command)
         if mode != "hide" {
-            if !AerospaceAPI.ensureEnabled() {
-                fputs("Could not enable aerospace, exiting\n", stderr)
-                NSApp.terminate(nil)
+            switch AerospaceAPI.ensureEnabled() {
+            case .success:
+                break
+            case .failure(let error):
+                showErrorAndExit(error)
                 return
             }
         }
@@ -137,5 +139,35 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationWillTerminate(_ notification: Notification) {
         HotkeyManager.shared.unregister()
+    }
+
+    private func showErrorAndExit(_ error: AerospaceError) {
+        fputs("\(error)\n", stderr)
+
+        let alert = NSAlert()
+        alert.messageText = "AeroSpace Error"
+        alert.informativeText = error.description
+        alert.alertStyle = .critical
+
+        if case .notInstalled = error {
+            alert.addButton(withTitle: "Open Installation Page")
+            alert.addButton(withTitle: "Quit")
+        } else {
+            alert.addButton(withTitle: "Quit")
+        }
+
+        // Temporarily become a regular app to show the alert
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+
+        let response = alert.runModal()
+
+        if case .notInstalled = error, response == .alertFirstButtonReturn {
+            if let url = URL(string: "https://github.com/nikitabobko/AeroSpace#installation") {
+                NSWorkspace.shared.open(url)
+            }
+        }
+
+        NSApp.terminate(nil)
     }
 }

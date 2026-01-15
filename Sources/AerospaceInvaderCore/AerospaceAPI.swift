@@ -1,27 +1,53 @@
 import Foundation
 
-public class AerospaceAPI {
-    public static let aerospacePath: String = {
-        // Apple Silicon (Homebrew)
-        let armPath = "/opt/homebrew/bin/aerospace"
-        // Intel Mac (Homebrew)
-        let intelPath = "/usr/local/bin/aerospace"
+public enum AerospaceError: Error, CustomStringConvertible {
+    case notInstalled
+    case notRunning
+    case commandFailed(String)
 
+    public var description: String {
+        switch self {
+        case .notInstalled:
+            return "AeroSpace is not installed. Install it with: brew install --cask nikitabobko/tap/aerospace"
+        case .notRunning:
+            return "AeroSpace is not running and could not be started."
+        case .commandFailed(let detail):
+            return "AeroSpace command failed: \(detail)"
+        }
+    }
+}
+
+public class AerospaceAPI {
+    // Apple Silicon (Homebrew)
+    private static let armPath = "/opt/homebrew/bin/aerospace"
+    // Intel Mac (Homebrew)
+    private static let intelPath = "/usr/local/bin/aerospace"
+
+    /// Returns the path to the aerospace binary, or nil if not installed.
+    public static var aerospacePath: String? {
         if FileManager.default.fileExists(atPath: armPath) {
             return armPath
         } else if FileManager.default.fileExists(atPath: intelPath) {
             return intelPath
         }
-        // Fallback - hope it's in PATH (won't work with full path but process will fail gracefully)
-        return armPath
-    }()
+        return nil
+    }
+
+    /// Check if aerospace binary is installed.
+    public static var isInstalled: Bool {
+        aerospacePath != nil
+    }
 
     /// Check if aerospace is enabled by trying to list workspaces.
     /// If it fails, enable aerospace.
-    public static func ensureEnabled() -> Bool {
+    public static func ensureEnabled() -> Result<Void, AerospaceError> {
+        guard let path = aerospacePath else {
+            return .failure(.notInstalled)
+        }
+
         // Try a simple command to check if aerospace is responding
         let checkTask = Process()
-        checkTask.executableURL = URL(fileURLWithPath: aerospacePath)
+        checkTask.executableURL = URL(fileURLWithPath: path)
         checkTask.arguments = ["list-workspaces", "--focused"]
 
         let pipe = Pipe()
@@ -41,16 +67,20 @@ public class AerospaceAPI {
         let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         if checkTask.terminationStatus == 0 && !output.isEmpty {
-            return true
+            return .success(())
         }
 
         return enableAerospace()
     }
 
-    private static func enableAerospace() -> Bool {
+    private static func enableAerospace() -> Result<Void, AerospaceError> {
+        guard let path = aerospacePath else {
+            return .failure(.notInstalled)
+        }
+
         fputs("Aerospace not responding, enabling...\n", stderr)
         let enableTask = Process()
-        enableTask.executableURL = URL(fileURLWithPath: aerospacePath)
+        enableTask.executableURL = URL(fileURLWithPath: path)
         enableTask.arguments = ["enable", "on"]
         enableTask.standardOutput = FileHandle.nullDevice
         enableTask.standardError = FileHandle.nullDevice
@@ -60,16 +90,17 @@ public class AerospaceAPI {
             enableTask.waitUntilExit()
             // Give it a moment to initialize
             Thread.sleep(forTimeInterval: 0.5)
-            return true
+            return .success(())
         } catch {
-            fputs("Failed to enable aerospace\n", stderr)
-            return false
+            return .failure(.notRunning)
         }
     }
 
     public static func getNonEmptyWorkspaces() -> [String] {
+        guard let path = aerospacePath else { return [] }
+
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: aerospacePath)
+        task.executableURL = URL(fileURLWithPath: path)
         task.arguments = ["list-workspaces", "--monitor", "all", "--empty", "no"]
 
         let pipe = Pipe()
@@ -87,8 +118,10 @@ public class AerospaceAPI {
     }
 
     public static func getCurrentWorkspace() -> String? {
+        guard let path = aerospacePath else { return nil }
+
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: aerospacePath)
+        task.executableURL = URL(fileURLWithPath: path)
         task.arguments = ["list-workspaces", "--focused"]
 
         let pipe = Pipe()
@@ -105,8 +138,10 @@ public class AerospaceAPI {
     }
 
     public static func switchToWorkspace(_ ws: String) {
+        guard let path = aerospacePath else { return }
+
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: aerospacePath)
+        task.executableURL = URL(fileURLWithPath: path)
         task.arguments = ["workspace", ws]
         task.standardOutput = FileHandle.nullDevice
         task.standardError = FileHandle.nullDevice
@@ -114,8 +149,10 @@ public class AerospaceAPI {
     }
 
     public static func getBindings(mode: String) -> [String: String]? {
+        guard let path = aerospacePath else { return nil }
+
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: aerospacePath)
+        task.executableURL = URL(fileURLWithPath: path)
         task.arguments = ["config", "--get", "mode.\(mode).binding", "--json"]
 
         let pipe = Pipe()
