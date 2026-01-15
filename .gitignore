@@ -1,0 +1,22 @@
+# Compiled binaries
+aerospace-invader
+aerospace-ui
+
+# Logs
+logs/
+
+# macOS
+.DS_Store
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+*.swp
+*~.nib
+
+# Swift Package Manager
+.build/
+Packages/
+Package.resolved
