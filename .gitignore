@@ -1,0 +1,24 @@
+# Compiled binaries
+/aerospace-invader
+
+# Logs
+logs/
+
+# Claude Code
+.claude/
+
+# macOS
+.DS_Store
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+*.swp
+*~.nib
+
+# Swift Package Manager
+.build/
+Packages/
+Package.resolved
