@@ -1,0 +1,22 @@
+excluded:
+  - .build
+
+disabled_rules:
+  - trailing_whitespace
+  - line_length
+
+opt_in_rules:
+  - empty_count
+  - explicit_init
+  - first_where
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - sorted_imports
+  - vertical_whitespace_closing_braces
+
+force_cast: warning
+force_try: warning
+
+identifier_name:
+  min_length: 1
+  max_length: 50
