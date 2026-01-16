@@ -101,6 +101,19 @@ public class WorkspaceNavigator {
     public func toggle(completion: @escaping ([String], String?) -> Void) {
         let cacheWasEmpty = cachedOrder.isEmpty
 
+        // Check if user manually switched workspaces (via AeroSpace keybinds)
+        // If so, update previousWorkspace to track the manual switch
+        if !cachedOrder.isEmpty {
+            let actualCurrent = AerospaceAPI.getCurrentWorkspace()
+            if let actual = actualCurrent, actual != cachedFocused {
+                // User switched manually - update tracking
+                if cachedFocused != nil {
+                    previousWorkspace = cachedFocused
+                }
+                cachedFocused = actual
+            }
+        }
+
         // Use cache for instant toggle
         if !cachedOrder.isEmpty, let prev = previousWorkspace, cachedOrder.contains(prev) {
             let oldFocused = cachedFocused
