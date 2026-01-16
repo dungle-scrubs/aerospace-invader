@@ -83,7 +83,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleRefresh() {
-        WorkspaceNavigator.shared.refresh { [weak self] order, current in
+        WorkspaceNavigator.shared.toggle { [weak self] order, current in
             guard !order.isEmpty else { return }
             self?.showOrUpdateWorkspaceWindow(workspaces: order, current: current)
         }

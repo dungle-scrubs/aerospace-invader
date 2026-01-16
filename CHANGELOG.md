@@ -7,11 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-01-16
+
+### Changed
+
+- `⌥P` now handles workspace toggle internally instead of relying on AeroSpace's `workspace-back-and-forth`
+- All navigation hotkeys (`⌥O`, `⌥I`, `⌥P`) now have identical cache-first performance
+
+### Fixed
+
+- `⌥P` shows tab bar instantly (previously waited for API call)
+
 ## [0.1.3] - 2026-01-16
 
 ### Fixed
 
-- `⌥P` (refresh) now shows tab bar instantly using cached data like `⌥O`/`⌥I`
+- Reverted cache-first for refresh (caused stale data display)
 
 ## [0.1.2] - 2026-01-16
 

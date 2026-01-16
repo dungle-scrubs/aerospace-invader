@@ -7,6 +7,7 @@ public class WorkspaceNavigator {
     private var cachedWorkspaces: [String] = []
     private var cachedFocused: String?
     private var cachedOrder: [String] = []
+    private var previousWorkspace: String?
 
     private init() {}
 
@@ -22,6 +23,11 @@ public class WorkspaceNavigator {
         let order = OrderManager.shared.mergeWithCurrent(workspaces)
         OrderManager.shared.saveOrder(order)
 
+        // Track previous workspace when focus changes
+        if let newFocused = focused, newFocused != cachedFocused, cachedFocused != nil {
+            previousWorkspace = cachedFocused
+        }
+
         cachedWorkspaces = workspaces
         cachedFocused = focused
         cachedOrder = order
@@ -36,6 +42,7 @@ public class WorkspaceNavigator {
             let idx = getCurrentIndex(in: cachedOrder, current: cachedFocused)
             let newIdx = idx > 0 ? idx - 1 : cachedOrder.count - 1
             let target = cachedOrder[newIdx]
+            previousWorkspace = cachedFocused
             cachedFocused = target
             AerospaceAPI.switchToWorkspace(target)
             completion(cachedOrder, target)
@@ -67,6 +74,7 @@ public class WorkspaceNavigator {
             let idx = getCurrentIndex(in: cachedOrder, current: cachedFocused)
             let newIdx = idx < cachedOrder.count - 1 ? idx + 1 : 0
             let target = cachedOrder[newIdx]
+            previousWorkspace = cachedFocused
             cachedFocused = target
             AerospaceAPI.switchToWorkspace(target)
             completion(cachedOrder, target)
@@ -89,22 +97,32 @@ public class WorkspaceNavigator {
         }
     }
 
-    /// Refresh and get current state - uses cache for instant response, refreshes after
-    public func refresh(completion: @escaping ([String], String?) -> Void) {
-        // Show immediately with cached data if available
-        if !cachedOrder.isEmpty {
-            completion(cachedOrder, cachedFocused)
+    /// Toggle between current and previous workspace - uses cache for instant response
+    public func toggle(completion: @escaping ([String], String?) -> Void) {
+        let cacheWasEmpty = cachedOrder.isEmpty
+
+        // Use cache for instant toggle
+        if !cachedOrder.isEmpty, let prev = previousWorkspace, cachedOrder.contains(prev) {
+            let oldFocused = cachedFocused
+            previousWorkspace = oldFocused
+            cachedFocused = prev
+            AerospaceAPI.switchToWorkspace(prev)
+            completion(cachedOrder, prev)
         }
 
-        // Refresh cache and update if data changed
+        // Refresh cache in background (only toggle if cache was empty)
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let oldFocused = self?.cachedFocused
             self?.refreshCache()
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                // Only call completion again if focused workspace changed
-                if self.cachedFocused != oldFocused {
-                    completion(self.cachedOrder, self.cachedFocused)
+            if cacheWasEmpty {
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    if let prev = self.previousWorkspace, self.cachedOrder.contains(prev) {
+                        let oldFocused = self.cachedFocused
+                        self.previousWorkspace = oldFocused
+                        self.cachedFocused = prev
+                        AerospaceAPI.switchToWorkspace(prev)
+                        completion(self.cachedOrder, prev)
+                    }
                 }
             }
         }
