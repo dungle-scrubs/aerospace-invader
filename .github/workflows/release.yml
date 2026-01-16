@@ -6,24 +6,20 @@ on:
 
 jobs:
   build:
+    runs-on: macos-14
     strategy:
       matrix:
-        include:
-          - arch: arm64
-            runner: macos-14
-          - arch: x86_64
-            runner: macos-13
-    runs-on: ${{ matrix.runner }}
+        arch: [arm64, x86_64]
     steps:
       - uses: actions/checkout@v4
 
       - name: Build release binary
-        run: swift build -c release
+        run: swift build -c release --arch ${{ matrix.arch }}
 
       - name: Create tarball
         run: |
           mkdir -p dist
-          cp .build/release/aerospace-invader dist/
+          cp .build/${{ matrix.arch }}-apple-macosx/release/aerospace-invader dist/
           tar -czvf aerospace-invader-${{ github.ref_name }}-darwin-${{ matrix.arch }}.tar.gz -C dist aerospace-invader
 
       - name: Upload artifact
