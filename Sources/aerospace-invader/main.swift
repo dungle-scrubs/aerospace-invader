@@ -13,5 +13,5 @@ if CommandLine.arguments.count > 2 {
 }
 
 app.delegate = delegate
-app.setActivationPolicy(.accessory)
+app.setActivationPolicy(.prohibited)
 app.run()

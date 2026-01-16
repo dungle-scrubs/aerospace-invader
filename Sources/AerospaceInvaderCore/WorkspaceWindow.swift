@@ -38,14 +38,18 @@ public class WorkspaceWindow: NSPanel {
         )
 
         isFloatingPanel = true
-        level = .popUpMenu
+        level = .floating
         backgroundColor = .clear
         isOpaque = false
         hasShadow = true
         isMovableByWindowBackground = false
+        hidesOnDeactivate = false
+        ignoresMouseEvents = true
+        collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
     }
 
-    public override var canBecomeKey: Bool { true }
+    public override var canBecomeKey: Bool { mode == .expanded }
+    public override var canBecomeMain: Bool { false }
 
     public override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 && mode == .expanded { // Escape
@@ -62,7 +66,7 @@ public class WorkspaceWindow: NSPanel {
 
         rebuildViews()
         layoutCompact(animated: false)
-        makeKeyAndOrderFront(nil)
+        orderFrontRegardless()
 
         hideTimer?.invalidate()
         if autoHide {
@@ -76,6 +80,10 @@ public class WorkspaceWindow: NSPanel {
         self.workspaces = workspaces
         self.currentWorkspace = current
         self.mode = .expanded
+
+        // Enable interaction for expanded mode
+        ignoresMouseEvents = false
+        level = .popUpMenu
 
         rebuildViews()
 
@@ -108,6 +116,10 @@ public class WorkspaceWindow: NSPanel {
         hideTimer?.invalidate()
         mode = .expanded
 
+        // Enable interaction for expanded mode
+        ignoresMouseEvents = false
+        level = .popUpMenu
+
         for item in itemViews {
             item.isExpanded = true
             item.updateAppearance()
@@ -132,6 +144,10 @@ public class WorkspaceWindow: NSPanel {
         removeClickOutsideMonitor()
         mode = .compact
 
+        // Restore non-interactive state for compact mode
+        ignoresMouseEvents = true
+        level = .floating
+
         for item in itemViews {
             item.isExpanded = false
             item.updateAppearance()
@@ -143,6 +159,11 @@ public class WorkspaceWindow: NSPanel {
 
     public func fadeOut() {
         removeClickOutsideMonitor()
+
+        // Restore non-interactive state
+        ignoresMouseEvents = true
+        level = .floating
+
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.2
             self.animator().alphaValue = 0
