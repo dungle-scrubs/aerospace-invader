@@ -10,7 +10,8 @@ struct ConfigManagerTests {
         {
             "back": { "key": "h", "modifiers": ["command"] },
             "forward": { "key": "l", "modifiers": ["command"] },
-            "expand": { "key": "space", "modifiers": ["option"] }
+            "expand": { "key": "space", "modifiers": ["option"] },
+            "refresh": { "key": "p", "modifiers": ["option"] }
         }
         """.data(using: .utf8)!
 
