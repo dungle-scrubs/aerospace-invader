@@ -13,7 +13,7 @@ public class WorkspaceItemView: NSView {
     public var onDragMove: ((NSPoint) -> Void)?
     public var onDragEnd: (() -> Void)?
 
-    private var label: NSTextField!
+    private var label: NSTextField! // swiftlint:disable:this implicitly_unwrapped_optional
     private var isDragging = false
     private var dragOffset: NSPoint = .zero
     private var mouseDownLocation: NSPoint = .zero
@@ -39,7 +39,7 @@ public class WorkspaceItemView: NSView {
 
         NSLayoutConstraint.activate([
             label.centerXAnchor.constraint(equalTo: centerXAnchor),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
 
         updateAppearance()

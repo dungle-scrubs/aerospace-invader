@@ -1,19 +1,21 @@
-import Testing
 @testable import AerospaceInvaderCore
+import Foundation
+import Testing
 
 @Suite("ConfigManager")
 struct ConfigManagerTests {
 
     @Test("load config from valid JSON")
     func loadConfigFromValidJSON() {
-        let json = """
+        let jsonString = """
         {
             "back": { "key": "h", "modifiers": ["command"] },
             "forward": { "key": "l", "modifiers": ["command"] },
             "expand": { "key": "space", "modifiers": ["option"] },
             "refresh": { "key": "p", "modifiers": ["option"] }
         }
-        """.data(using: .utf8)!
+        """
+        let json = Data(jsonString.utf8)
 
         let config = ConfigManager.loadConfig(from: json)
 
@@ -26,7 +28,7 @@ struct ConfigManagerTests {
 
     @Test("load config from invalid JSON")
     func loadConfigFromInvalidJSON() {
-        let json = "not valid json".data(using: .utf8)!
+        let json = Data("not valid json".utf8)
 
         let config = ConfigManager.loadConfig(from: json)
 
@@ -35,11 +37,12 @@ struct ConfigManagerTests {
 
     @Test("load config from partial JSON")
     func loadConfigFromPartialJSON() {
-        let json = """
+        let jsonString = """
         {
             "back": { "key": "h" }
         }
-        """.data(using: .utf8)!
+        """
+        let json = Data(jsonString.utf8)
 
         let config = ConfigManager.loadConfig(from: json)
 

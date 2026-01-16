@@ -49,11 +49,9 @@ public class OrderManager {
         }
 
         // Append new workspaces not in saved order
-        for ws in current {
-            if !seen.contains(ws) {
-                result.append(ws)
-                seen.insert(ws)
-            }
+        for ws in current where !seen.contains(ws) {
+            result.append(ws)
+            seen.insert(ws)
         }
 
         return result

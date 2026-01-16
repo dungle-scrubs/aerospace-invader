@@ -1,5 +1,5 @@
-import Foundation
 import Carbon.HIToolbox
+import Foundation
 
 public struct HotkeyConfig: Codable, Equatable {
     public var key: String
@@ -87,7 +87,7 @@ public class ConfigManager {
         "space": kVK_Space, "return": kVK_Return, "tab": kVK_Tab,
         "escape": kVK_Escape, "delete": kVK_Delete,
         "left": kVK_LeftArrow, "right": kVK_RightArrow,
-        "up": kVK_UpArrow, "down": kVK_DownArrow,
+        "up": kVK_UpArrow, "down": kVK_DownArrow
     ]
 
     // Modifier name to Carbon modifier mask
@@ -98,7 +98,7 @@ public class ConfigManager {
         "cmd": cmdKey,
         "control": controlKey,
         "ctrl": controlKey,
-        "shift": shiftKey,
+        "shift": shiftKey
     ]
 
     public static func keyCode(for key: String) -> UInt32? {

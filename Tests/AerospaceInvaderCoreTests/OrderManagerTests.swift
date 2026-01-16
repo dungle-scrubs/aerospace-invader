@@ -1,5 +1,5 @@
-import Testing
 @testable import AerospaceInvaderCore
+import Testing
 
 @Suite("OrderManager")
 struct OrderManagerTests {

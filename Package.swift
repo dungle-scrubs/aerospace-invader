@@ -9,7 +9,7 @@ let package = Package(
     ],
     products: [
         .executable(name: "aerospace-invader", targets: ["aerospace-invader"]),
-        .library(name: "AerospaceInvaderCore", targets: ["AerospaceInvaderCore"]),
+        .library(name: "AerospaceInvaderCore", targets: ["AerospaceInvaderCore"])
     ],
     targets: [
         .target(
@@ -23,6 +23,6 @@ let package = Package(
         .testTarget(
             name: "AerospaceInvaderCoreTests",
             dependencies: ["AerospaceInvaderCore"]
-        ),
+        )
     ]
 )
