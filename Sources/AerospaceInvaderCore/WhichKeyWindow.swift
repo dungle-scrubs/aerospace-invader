@@ -1,7 +1,9 @@
 import Cocoa
+import CoreGraphics
 
 public class WhichKeyWindow: NSPanel {
-    private var eventMonitor: Any?
+    private var eventTap: CFMachPort?
+    private var runLoopSource: CFRunLoopSource?
 
     public init() {
         super.init(
@@ -28,17 +30,77 @@ public class WhichKeyWindow: NSPanel {
         rebuildUI(groups: grouped)
         makeKeyAndOrderFront(nil)
 
-        // Dismiss on click outside or any key press
-        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { [weak self] _ in
-            self?.fadeOut()
+        // Use CGEventTap to catch keys at a lower level than AeroSpace
+        setupEventTap()
+    }
+
+    private func setupEventTap() {
+        // Create a callback that references self via pointer
+        let callback: CGEventTapCallBack = { _, type, event, userInfo in
+            guard let userInfo = userInfo else { return Unmanaged.passRetained(event) }
+            let window = Unmanaged<WhichKeyWindow>.fromOpaque(userInfo).takeUnretainedValue()
+
+            if type == .keyDown {
+                let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+                // Escape key = 53
+                if keyCode == 53 {
+                    DispatchQueue.main.async {
+                        window.fadeOut()
+                    }
+                }
+            } else if type == .leftMouseDown || type == .rightMouseDown {
+                // Close on click outside
+                DispatchQueue.main.async {
+                    window.fadeOut()
+                }
+            }
+
+            // Return the event unchanged (passive listener)
+            return Unmanaged.passRetained(event)
+        }
+
+        let selfPointer = Unmanaged.passUnretained(self).toOpaque()
+
+        // Listen for key down and mouse clicks
+        let eventMask: CGEventMask = (1 << CGEventType.keyDown.rawValue) |
+            (1 << CGEventType.leftMouseDown.rawValue) |
+            (1 << CGEventType.rightMouseDown.rawValue)
+
+        // Create a passive event tap (listenOnly doesn't intercept)
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .listenOnly,
+            eventsOfInterest: eventMask,
+            callback: callback,
+            userInfo: selfPointer
+        ) else {
+            fputs("Failed to create event tap - accessibility permissions may be required\n", stderr)
+            return
+        }
+
+        eventTap = tap
+        runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+
+        if let source = runLoopSource {
+            CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
+            CGEvent.tapEnable(tap: tap, enable: true)
         }
     }
 
-    public func fadeOut() {
-        if let monitor = eventMonitor {
-            NSEvent.removeMonitor(monitor)
-            eventMonitor = nil
+    private func cleanupEventTap() {
+        if let tap = eventTap {
+            CGEvent.tapEnable(tap: tap, enable: false)
         }
+        if let source = runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
+        }
+        eventTap = nil
+        runLoopSource = nil
+    }
+
+    public func fadeOut() {
+        cleanupEventTap()
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.15
             self.animator().alphaValue = 0
