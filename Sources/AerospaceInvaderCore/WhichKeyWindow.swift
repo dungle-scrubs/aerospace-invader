@@ -40,22 +40,22 @@ public class WhichKeyWindow: NSPanel {
             guard let userInfo = userInfo else { return Unmanaged.passRetained(event) }
             let window = Unmanaged<WhichKeyWindow>.fromOpaque(userInfo).takeUnretainedValue()
 
+            // Note: Key events in service mode are intercepted by AeroSpace before
+            // reaching this tap. The aerospace config handles closing the window
+            // when exiting service mode. This tap catches mouse clicks to dismiss.
             if type == .keyDown {
                 let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-                // Escape key = 53
-                if keyCode == 53 {
+                if keyCode == 53 { // Escape
                     DispatchQueue.main.async {
                         window.fadeOut()
                     }
                 }
             } else if type == .leftMouseDown || type == .rightMouseDown {
-                // Close on click outside
                 DispatchQueue.main.async {
                     window.fadeOut()
                 }
             }
 
-            // Return the event unchanged (passive listener)
             return Unmanaged.passRetained(event)
         }
 
