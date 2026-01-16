@@ -1,0 +1,118 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-14
+          - arch: x86_64
+            runner: macos-13
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release binary
+        run: swift build -c release
+
+      - name: Create tarball
+        run: |
+          mkdir -p dist
+          cp .build/release/aerospace-invader dist/
+          tar -czvf aerospace-invader-${{ github.ref_name }}-darwin-${{ matrix.arch }}.tar.gz -C dist aerospace-invader
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aerospace-invader-darwin-${{ matrix.arch }}
+          path: aerospace-invader-${{ github.ref_name }}-darwin-${{ matrix.arch }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Calculate SHA256
+        id: sha
+        run: |
+          ARM_SHA=$(shasum -a 256 aerospace-invader-darwin-arm64/aerospace-invader-${{ github.ref_name }}-darwin-arm64.tar.gz | cut -d' ' -f1)
+          X86_SHA=$(shasum -a 256 aerospace-invader-darwin-x86_64/aerospace-invader-${{ github.ref_name }}-darwin-x86_64.tar.gz | cut -d' ' -f1)
+          echo "arm64_sha=$ARM_SHA" >> $GITHUB_OUTPUT
+          echo "x86_64_sha=$X86_SHA" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            aerospace-invader-darwin-arm64/aerospace-invader-${{ github.ref_name }}-darwin-arm64.tar.gz
+            aerospace-invader-darwin-x86_64/aerospace-invader-${{ github.ref_name }}-darwin-x86_64.tar.gz
+          body: |
+            ## Installation
+
+            ### Homebrew (recommended)
+
+            ```bash
+            brew install dungle-scrubs/aerospace-invader/aerospace-invader
+            brew services start aerospace-invader
+            ```
+
+            ### Manual download
+
+            **Apple Silicon (M1/M2/M3):**
+            ```bash
+            curl -L https://github.com/dungle-scrubs/aerospace-invader/releases/download/${{ github.ref_name }}/aerospace-invader-${{ github.ref_name }}-darwin-arm64.tar.gz | tar xz
+            mv aerospace-invader /usr/local/bin/
+            ```
+
+            **Intel:**
+            ```bash
+            curl -L https://github.com/dungle-scrubs/aerospace-invader/releases/download/${{ github.ref_name }}/aerospace-invader-${{ github.ref_name }}-darwin-x86_64.tar.gz | tar xz
+            mv aerospace-invader /usr/local/bin/
+            ```
+
+            ## Checksums
+
+            | Architecture | SHA256 |
+            |--------------|--------|
+            | arm64 | `${{ steps.sha.outputs.arm64_sha }}` |
+            | x86_64 | `${{ steps.sha.outputs.x86_64_sha }}` |
+
+  update-formula:
+    needs: release
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Download arm64 tarball and calculate SHA
+        run: |
+          curl -L -o release.tar.gz "https://github.com/dungle-scrubs/aerospace-invader/archive/refs/tags/${{ github.ref_name }}.tar.gz"
+          SHA=$(shasum -a 256 release.tar.gz | cut -d' ' -f1)
+          echo "SHA256=$SHA" >> $GITHUB_ENV
+
+      - name: Update formula
+        run: |
+          sed -i '' "s/sha256 \".*\"/sha256 \"$SHA256\"/" Formula/aerospace-invader.rb
+          sed -i '' "s|/v[0-9]*\.[0-9]*\.[0-9]*.tar.gz|/${{ github.ref_name }}.tar.gz|g" Formula/aerospace-invader.rb
+
+      - name: Commit formula update
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add Formula/aerospace-invader.rb
+          git diff --staged --quiet || git commit -m "Update formula for ${{ github.ref_name }}"
+          git push origin main

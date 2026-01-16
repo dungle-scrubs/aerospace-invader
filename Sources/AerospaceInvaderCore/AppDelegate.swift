@@ -45,6 +45,11 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private func startDaemon() {
         fputs("Starting aerospace-invader daemon...\n", stderr)
 
+        // Pre-populate cache in background
+        DispatchQueue.global(qos: .userInitiated).async {
+            WorkspaceNavigator.shared.refreshCache()
+        }
+
         // Register hotkeys
         HotkeyManager.shared.onBack = { [weak self] in
             self?.handleBack()
@@ -55,28 +60,47 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         HotkeyManager.shared.onExpand = { [weak self] in
             self?.handleExpand()
         }
+        HotkeyManager.shared.onRefresh = { [weak self] in
+            self?.handleRefresh()
+        }
         HotkeyManager.shared.register()
 
         fputs("Daemon running.\n", stderr)
     }
 
     private func handleExpand() {
-        // If window is visible in compact mode, expand it with animation
-        if let window = workspaceWindow, window.isVisible, window.mode == .compact {
-            window.expand()
+        // If window is visible, toggle based on current mode
+        if let window = workspaceWindow, window.isVisible {
+            if window.mode == .compact {
+                window.expand()
+            } else {
+                window.fadeOut()
+            }
+        } else {
+            // Show expanded view directly
+            showWorkspaceWindow(expanded: true, autoHide: false)
+        }
+    }
+
+    private func handleRefresh() {
+        WorkspaceNavigator.shared.refresh { [weak self] order, current in
+            guard !order.isEmpty else { return }
+            self?.showOrUpdateWorkspaceWindow(workspaces: order, current: current)
         }
     }
 
     private func handleBack() {
-        let (order, current) = WorkspaceNavigator.shared.back()
-        guard !order.isEmpty else { return }
-        showOrUpdateWorkspaceWindow(workspaces: order, current: current)
+        WorkspaceNavigator.shared.back { [weak self] order, current in
+            guard !order.isEmpty else { return }
+            self?.showOrUpdateWorkspaceWindow(workspaces: order, current: current)
+        }
     }
 
     private func handleForward() {
-        let (order, current) = WorkspaceNavigator.shared.forward()
-        guard !order.isEmpty else { return }
-        showOrUpdateWorkspaceWindow(workspaces: order, current: current)
+        WorkspaceNavigator.shared.forward { [weak self] order, current in
+            guard !order.isEmpty else { return }
+            self?.showOrUpdateWorkspaceWindow(workspaces: order, current: current)
+        }
     }
 
     private func showOrUpdateWorkspaceWindow(workspaces: [String], current: String?) {
@@ -117,13 +141,11 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         let currentWs = AerospaceAPI.getCurrentWorkspace()
 
         workspaceWindow = createWorkspaceWindow()
-        workspaceWindow?.show(workspaces: ordered, current: currentWs, autoHide: autoHide && !expanded)
 
         if expanded {
-            // Small delay so initial layout happens first
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                self.workspaceWindow?.expand()
-            }
+            workspaceWindow?.showExpanded(workspaces: ordered, current: currentWs)
+        } else {
+            workspaceWindow?.show(workspaces: ordered, current: currentWs, autoHide: autoHide)
         }
     }
 

@@ -1,5 +1,8 @@
 # aerospace-invader
 
+[![CI](https://github.com/dungle-scrubs/aerospace-invader/actions/workflows/ci.yml/badge.svg)](https://github.com/dungle-scrubs/aerospace-invader/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A workspace navigator and on-screen display for [AeroSpace](https://github.com/nikitabobko/AeroSpace), the i3-like tiling window manager for macOS.
 
 ## Features
@@ -48,6 +51,7 @@ aerospace-invader daemon
 **Hotkeys:**
 - `⌥O` - Previous workspace
 - `⌥I` - Next workspace
+- `⌥P` - Show workspace bar (without switching)
 - `⌥.` - Expand compact bar to grid view
 
 ### One-shot Commands
@@ -103,7 +107,8 @@ Create `~/.config/aerospace-invader/config.json` to customize hotkeys:
 {
   "back": { "key": "o", "modifiers": ["option"] },
   "forward": { "key": "i", "modifiers": ["option"] },
-  "expand": { "key": ".", "modifiers": ["option"] }
+  "expand": { "key": ".", "modifiers": ["option"] },
+  "refresh": { "key": "p", "modifiers": ["option"] }
 }
 ```
 

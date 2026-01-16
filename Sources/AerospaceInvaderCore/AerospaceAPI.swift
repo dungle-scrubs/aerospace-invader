@@ -96,12 +96,13 @@ public class AerospaceAPI {
         }
     }
 
-    public static func getNonEmptyWorkspaces() -> [String] {
-        guard let path = aerospacePath else { return [] }
+    /// Returns (workspaces, focusedWorkspace) in a single CLI call
+    public static func getWorkspacesWithFocus() -> (workspaces: [String], focused: String?) {
+        guard let path = aerospacePath else { return ([], nil) }
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: path)
-        task.arguments = ["list-workspaces", "--monitor", "all", "--empty", "no"]
+        task.arguments = ["list-workspaces", "--monitor", "all", "--empty", "no", "--format", "%{workspace}|%{workspace-is-focused}"]
 
         let pipe = Pipe()
         task.standardOutput = pipe
@@ -110,31 +111,33 @@ public class AerospaceAPI {
         do {
             try task.run()
             task.waitUntilExit()
-        } catch { return [] }
+        } catch { return ([], nil) }
 
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         let output = String(data: data, encoding: .utf8) ?? ""
-        return output.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+
+        var workspaces: [String] = []
+        var focused: String?
+
+        for line in output.split(separator: "\n") {
+            let parts = line.split(separator: "|")
+            guard parts.count >= 2 else { continue }
+            let ws = String(parts[0])
+            workspaces.append(ws)
+            if parts[1] == "true" {
+                focused = ws
+            }
+        }
+
+        return (workspaces, focused)
+    }
+
+    public static func getNonEmptyWorkspaces() -> [String] {
+        return getWorkspacesWithFocus().workspaces
     }
 
     public static func getCurrentWorkspace() -> String? {
-        guard let path = aerospacePath else { return nil }
-
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: path)
-        task.arguments = ["list-workspaces", "--focused"]
-
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = FileHandle.nullDevice
-
-        do {
-            try task.run()
-            task.waitUntilExit()
-        } catch { return nil }
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return getWorkspacesWithFocus().focused
     }
 
     public static func switchToWorkspace(_ ws: String) {
@@ -146,6 +149,7 @@ public class AerospaceAPI {
         task.standardOutput = FileHandle.nullDevice
         task.standardError = FileHandle.nullDevice
         try? task.run()
+        // Don't wait - fire and forget
     }
 
     public static func getBindings(mode: String) -> [String: String]? {

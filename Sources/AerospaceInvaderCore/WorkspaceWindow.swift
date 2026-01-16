@@ -24,11 +24,10 @@ public class WorkspaceWindow: NSPanel {
     private let compactSpacing: CGFloat = 4
 
     // Expanded layout constants
-    private let expandedItemWidth: CGFloat = 80
-    private let expandedItemHeight: CGFloat = 50
-    private let expandedSpacing: CGFloat = 10
-    private let expandedPadding: CGFloat = 16
-    private let expandedHeaderHeight: CGFloat = 24
+    private let expandedItemSize: CGFloat = 100
+    private let expandedSpacing: CGFloat = 12
+    private let expandedPadding: CGFloat = 20
+    private let expandedHeaderHeight: CGFloat = 28
 
     public init() {
         super.init(
@@ -69,6 +68,38 @@ public class WorkspaceWindow: NSPanel {
         if autoHide {
             hideTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { [weak self] _ in
                 self?.fadeOut()
+            }
+        }
+    }
+
+    public func showExpanded(workspaces: [String], current: String?) {
+        self.workspaces = workspaces
+        self.currentWorkspace = current
+        self.mode = .expanded
+
+        rebuildViews()
+
+        for item in itemViews {
+            item.isExpanded = true
+            item.updateAppearance()
+        }
+
+        layoutExpanded(animated: false)
+
+        // Fade in
+        alphaValue = 0
+        makeKeyAndOrderFront(nil)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            self.animator().alphaValue = 1
+        }
+
+        // Monitor for click outside
+        clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            guard let self = self, self.mode == .expanded else { return }
+            let screenLoc = NSEvent.mouseLocation
+            if !self.frame.contains(screenLoc) {
+                self.fadeOut()
             }
         }
     }
@@ -241,11 +272,12 @@ public class WorkspaceWindow: NSPanel {
         let rows = (workspaces.count + cols - 1) / cols
 
         // Add extra space at top for close button
-        let windowWidth = CGFloat(cols) * (expandedItemWidth + expandedSpacing) - expandedSpacing + expandedPadding * 2
-        let windowHeight = CGFloat(rows) * (expandedItemHeight + expandedSpacing) - expandedSpacing + expandedPadding * 2 + expandedHeaderHeight
+        let windowWidth = CGFloat(cols) * (expandedItemSize + expandedSpacing) - expandedSpacing + expandedPadding * 2
+        let windowHeight = CGFloat(rows) * (expandedItemSize + expandedSpacing) - expandedSpacing + expandedPadding * 2 + expandedHeaderHeight
 
+        // Center on screen
         let windowX = visibleFrame.midX - windowWidth / 2
-        let windowY = visibleFrame.maxY - windowHeight - 50
+        let windowY = visibleFrame.midY - windowHeight / 2
 
         let duration = animated ? 0.25 : 0.0
 
@@ -256,8 +288,9 @@ public class WorkspaceWindow: NSPanel {
             self.animator().setFrame(NSRect(x: windowX, y: windowY, width: windowWidth, height: windowHeight), display: true)
             self.backgroundView.animator().frame = NSRect(x: 0, y: 0, width: windowWidth, height: windowHeight)
 
-            // Position close button in upper left
-            self.closeButton?.frame = NSRect(x: 10, y: windowHeight - 20, width: 14, height: 14)
+            // Position close button in upper left with even spacing
+            let closeButtonMargin: CGFloat = 12
+            self.closeButton?.frame = NSRect(x: closeButtonMargin, y: windowHeight - closeButtonMargin - 14, width: 14, height: 14)
             self.closeButton?.isHidden = false
 
             for item in itemViews {
@@ -271,18 +304,18 @@ public class WorkspaceWindow: NSPanel {
         let col = index % cols
         let row = index / cols
 
-        let x = expandedPadding + CGFloat(col) * (expandedItemWidth + expandedSpacing)
-        let y = windowHeight - expandedPadding - headerHeight - CGFloat(row + 1) * (expandedItemHeight + expandedSpacing) + expandedSpacing
+        let x = expandedPadding + CGFloat(col) * (expandedItemSize + expandedSpacing)
+        let y = windowHeight - expandedPadding - headerHeight - CGFloat(row + 1) * (expandedItemSize + expandedSpacing) + expandedSpacing
 
-        return NSRect(x: x, y: y, width: expandedItemWidth, height: expandedItemHeight)
+        return NSRect(x: x, y: y, width: expandedItemSize, height: expandedItemSize)
     }
 
     private func indexForPoint(_ point: NSPoint) -> Int {
         let cols = min(workspaces.count, 5)
         let windowHeight = backgroundView.bounds.height
 
-        let col = Int((point.x - expandedPadding) / (expandedItemWidth + expandedSpacing))
-        let row = Int((windowHeight - expandedPadding - point.y) / (expandedItemHeight + expandedSpacing))
+        let col = Int((point.x - expandedPadding) / (expandedItemSize + expandedSpacing))
+        let row = Int((windowHeight - expandedPadding - point.y) / (expandedItemSize + expandedSpacing))
 
         let clampedCol = max(0, min(col, cols - 1))
         let clampedRow = max(0, row)

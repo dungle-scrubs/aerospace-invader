@@ -48,17 +48,17 @@ public class WorkspaceItemView: NSView {
     public func updateAppearance() {
         if isExpanded {
             // Expanded tile style
-            layer?.cornerRadius = 8
+            layer?.cornerRadius = 10
             if isActive {
-                layer?.backgroundColor = NSColor(red: 0, green: 0.7, blue: 0.3, alpha: 1).cgColor
+                layer?.backgroundColor = NSColor(red: 0.2, green: 0.7, blue: 0.4, alpha: 1).cgColor
                 layer?.borderColor = Style.activeColor.cgColor
                 layer?.borderWidth = 2
             } else {
-                layer?.backgroundColor = NSColor(red: 0.2, green: 0.4, blue: 0.6, alpha: 1).cgColor
+                layer?.backgroundColor = NSColor(white: 0.25, alpha: 1).cgColor
                 layer?.borderWidth = 0
             }
             label.textColor = .white
-            label.font = NSFont.monospacedSystemFont(ofSize: 15, weight: .medium)
+            label.font = NSFont.monospacedSystemFont(ofSize: 18, weight: .semibold)
         } else {
             // Compact pill style
             layer?.cornerRadius = 4
@@ -85,6 +85,8 @@ public class WorkspaceItemView: NSView {
             superview?.addSubview(self)
             onDragStart?()
 
+            NSCursor.closedHand.push()
+
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.1
                 self.animator().alphaValue = 0.85
@@ -108,6 +110,8 @@ public class WorkspaceItemView: NSView {
             let distance = hypot(mouseUpLocation.x - mouseDownLocation.x, mouseUpLocation.y - mouseDownLocation.y)
 
             isDragging = false
+            NSCursor.pop()
+
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.15
                 self.animator().alphaValue = 1
