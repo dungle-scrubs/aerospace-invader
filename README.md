@@ -51,7 +51,7 @@ aerospace-invader daemon
 **Hotkeys:**
 - `⌥O` - Previous workspace
 - `⌥I` - Next workspace
-- `⌥P` - Show workspace bar (without switching)
+- `⌥P` - Toggle between current and previous workspace
 - `⌥.` - Expand compact bar to grid view
 
 ### One-shot Commands
