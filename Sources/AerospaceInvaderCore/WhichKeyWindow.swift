@@ -1,6 +1,8 @@
 import Cocoa
 
 public class WhichKeyWindow: NSPanel {
+    private var eventMonitor: Any?
+
     public init() {
         super.init(
             contentRect: .zero,
@@ -26,13 +28,17 @@ public class WhichKeyWindow: NSPanel {
         rebuildUI(groups: grouped)
         makeKeyAndOrderFront(nil)
 
-        // Dismiss on click outside or any key press (aerospace eats Esc first)
-        NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { [weak self] _ in
+        // Dismiss on click outside or any key press
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { [weak self] _ in
             self?.fadeOut()
         }
     }
 
     public func fadeOut() {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.15
             self.animator().alphaValue = 0
