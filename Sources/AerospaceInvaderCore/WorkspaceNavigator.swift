@@ -89,13 +89,23 @@ public class WorkspaceNavigator {
         }
     }
 
-    /// Refresh and get current state (async)
+    /// Refresh and get current state - uses cache for instant response, refreshes after
     public func refresh(completion: @escaping ([String], String?) -> Void) {
+        // Show immediately with cached data if available
+        if !cachedOrder.isEmpty {
+            completion(cachedOrder, cachedFocused)
+        }
+
+        // Refresh cache and update if data changed
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let oldFocused = self?.cachedFocused
             self?.refreshCache()
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                completion(self.cachedOrder, self.cachedFocused)
+                // Only call completion again if focused workspace changed
+                if self.cachedFocused != oldFocused {
+                    completion(self.cachedOrder, self.cachedFocused)
+                }
             }
         }
     }
