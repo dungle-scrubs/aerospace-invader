@@ -105,7 +105,7 @@ public class WorkspaceItemView: NSView {
     }
 
     public override func mouseUp(with event: NSEvent) {
-        if isExpanded && isDragging {
+        if isDragging {
             let mouseUpLocation = superview?.convert(event.locationInWindow, from: nil) ?? .zero
             let distance = hypot(mouseUpLocation.x - mouseDownLocation.x, mouseUpLocation.y - mouseDownLocation.y)
 
