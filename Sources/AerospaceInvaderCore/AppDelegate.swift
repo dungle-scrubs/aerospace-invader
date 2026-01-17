@@ -83,7 +83,14 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleRefresh() {
-        WorkspaceNavigator.shared.toggle { [weak self] order, current in
+        // Use AeroSpace's built-in back-and-forth which tracks actual workspace history
+        AerospaceAPI.workspaceBackAndForth()
+
+        // Show UI with updated state after a brief delay for the switch to complete
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            let workspaces = AerospaceAPI.getNonEmptyWorkspaces()
+            let order = OrderManager.shared.mergeWithCurrent(workspaces)
+            let current = AerospaceAPI.getCurrentWorkspace()
             guard !order.isEmpty else { return }
             self?.showOrUpdateWorkspaceWindow(workspaces: order, current: current)
         }

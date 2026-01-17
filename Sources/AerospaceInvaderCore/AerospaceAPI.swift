@@ -152,6 +152,18 @@ public class AerospaceAPI {
         // Don't wait - fire and forget
     }
 
+    public static func workspaceBackAndForth() {
+        guard let path = aerospacePath else { return }
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: path)
+        task.arguments = ["workspace-back-and-forth"]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        try? task.run()
+        // Don't wait - fire and forget
+    }
+
     public static func getBindings(mode: String) -> [String: String]? {
         guard let path = aerospacePath else { return nil }
 
