@@ -37,7 +37,7 @@ public class WhichKeyWindow: NSPanel {
     private func setupEventTap() {
         // Create a callback that references self via pointer
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
-            guard let userInfo = userInfo else { return Unmanaged.passRetained(event) }
+            guard let userInfo = userInfo else { return Unmanaged.passUnretained(event) }
             let window = Unmanaged<WhichKeyWindow>.fromOpaque(userInfo).takeUnretainedValue()
 
             // Note: Key events in service mode are intercepted by AeroSpace before
@@ -56,7 +56,7 @@ public class WhichKeyWindow: NSPanel {
                 }
             }
 
-            return Unmanaged.passRetained(event)
+            return Unmanaged.passUnretained(event)
         }
 
         let selfPointer = Unmanaged.passUnretained(self).toOpaque()
