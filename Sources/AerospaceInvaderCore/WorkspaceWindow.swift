@@ -286,7 +286,7 @@ public class WorkspaceWindow: NSPanel {
     }
 
     private func layoutExpanded(animated: Bool) {
-        guard let screen = NSScreen.main else { return }
+        guard let screen = NSScreen.main, !workspaces.isEmpty else { return }
         let visibleFrame = screen.visibleFrame
 
         let cols = min(workspaces.count, 5)
@@ -336,7 +336,7 @@ public class WorkspaceWindow: NSPanel {
         let windowHeight = backgroundView.bounds.height
 
         let col = Int((point.x - expandedPadding) / (expandedItemSize + expandedSpacing))
-        let row = Int((windowHeight - expandedPadding - point.y) / (expandedItemSize + expandedSpacing))
+        let row = Int((windowHeight - expandedPadding - expandedHeaderHeight - point.y) / (expandedItemSize + expandedSpacing))
 
         let clampedCol = max(0, min(col, cols - 1))
         let clampedRow = max(0, row)
