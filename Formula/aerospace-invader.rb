@@ -1,8 +1,8 @@
 class AerospaceInvader < Formula
   desc "Workspace navigator and OSD for AeroSpace window manager"
   homepage "https://github.com/dungle-scrubs/aerospace-invader"
-  url "https://github.com/dungle-scrubs/aerospace-invader/archive/refs/tags/v0.2.0.tar.gz"
-  sha256 "360be56dab44df2e53bb87077c33e20ddd2913c31817fbb90d36a1bc9f62d2e8"
+  url "https://github.com/dungle-scrubs/aerospace-invader/archive/refs/tags/v0.2.1.tar.gz"
+  sha256 "411eb582307f152021ff5a2c375b9d0180dc61e8ef73f5476e7f6ef0e0cb5a11"
   license "MIT"
 
   depends_on :macos
