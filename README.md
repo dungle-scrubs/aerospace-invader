@@ -76,13 +76,9 @@ To show the which-key display when entering an AeroSpace mode, add this to your 
 ```toml
 [mode.main.binding]
 alt-shift-semicolon = ['mode service', 'exec-and-forget /opt/homebrew/bin/aerospace-invader whichkey service']
-
-[mode.service.binding]
-# Close the which-key window when exiting service mode
-esc = ['reload-config', 'mode main', 'exec-and-forget pkill -f "aerospace-invader whichkey"']
 ```
 
-The `pkill` command is required because AeroSpace intercepts key events before they reach the which-key window.
+The which-key window automatically closes when AeroSpace exits the mode (i.e., when any binding is executed).
 
 ### LaunchAgent (start at login)
 

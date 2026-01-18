@@ -183,4 +183,24 @@ public class AerospaceAPI {
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         return try? JSONSerialization.jsonObject(with: data) as? [String: String]
     }
+
+    public static func getCurrentMode() -> String? {
+        guard let path = aerospacePath else { return nil }
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: path)
+        task.arguments = ["list-modes", "--current"]
+
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = FileHandle.nullDevice
+
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch { return nil }
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }

@@ -4,6 +4,8 @@ import CoreGraphics
 public class WhichKeyWindow: NSPanel {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var modeCheckTimer: Timer?
+    private var targetMode: String?
 
     public init() {
         super.init(
@@ -21,17 +23,37 @@ public class WhichKeyWindow: NSPanel {
     }
 
     public func show(mode: String) {
+
         guard let bindings = AerospaceAPI.getBindings(mode: mode) else {
             fputs("Failed to get bindings for mode: \(mode)\n", stderr)
             return
         }
 
+        targetMode = mode
         let grouped = groupBindings(bindings)
         rebuildUI(groups: grouped)
         makeKeyAndOrderFront(nil)
 
         // Use CGEventTap to catch keys at a lower level than AeroSpace
         setupEventTap()
+
+        // Poll for mode changes to auto-close when user executes a binding
+        // Delay start to allow mode to settle after aerospace enters it
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.startModeCheckTimer()
+        }
+    }
+
+    private func startModeCheckTimer() {
+        modeCheckTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
+            guard let self = self, let target = self.targetMode else { return }
+            DispatchQueue.global(qos: .userInitiated).async {
+                guard let current = AerospaceAPI.getCurrentMode(), current != target else { return }
+                DispatchQueue.main.async {
+                    self.fadeOut()
+                }
+            }
+        }
     }
 
     private func setupEventTap() {
@@ -100,6 +122,8 @@ public class WhichKeyWindow: NSPanel {
     }
 
     public func fadeOut() {
+        modeCheckTimer?.invalidate()
+        modeCheckTimer = nil
         cleanupEventTap()
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.15
