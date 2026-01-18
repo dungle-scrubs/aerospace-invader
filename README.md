@@ -130,7 +130,7 @@ Create `~/.config/aerospace-invader/config.json` to customize hotkeys:
   "back": { "key": "o", "modifiers": ["option"] },
   "forward": { "key": "i", "modifiers": ["option"] },
   "expand": { "key": ".", "modifiers": ["option"] },
-  "refresh": { "key": "p", "modifiers": ["option"] }
+  "toggle": { "key": "p", "modifiers": ["option"] }
 }
 ```
 

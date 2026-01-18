@@ -15,20 +15,20 @@ public struct Config: Codable, Equatable {
     public var back: HotkeyConfig
     public var forward: HotkeyConfig
     public var expand: HotkeyConfig
-    public var refresh: HotkeyConfig
+    public var toggle: HotkeyConfig
 
     public static let `default` = Config(
         back: HotkeyConfig(key: "o"),
         forward: HotkeyConfig(key: "i"),
         expand: HotkeyConfig(key: "."),
-        refresh: HotkeyConfig(key: "p")
+        toggle: HotkeyConfig(key: "p")
     )
 
-    public init(back: HotkeyConfig, forward: HotkeyConfig, expand: HotkeyConfig, refresh: HotkeyConfig) {
+    public init(back: HotkeyConfig, forward: HotkeyConfig, expand: HotkeyConfig, toggle: HotkeyConfig) {
         self.back = back
         self.forward = forward
         self.expand = expand
-        self.refresh = refresh
+        self.toggle = toggle
     }
 }
 

@@ -60,8 +60,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         HotkeyManager.shared.onExpand = { [weak self] in
             self?.handleExpand()
         }
-        HotkeyManager.shared.onRefresh = { [weak self] in
-            self?.handleRefresh()
+        HotkeyManager.shared.onToggle = { [weak self] in
+            self?.handleToggle()
         }
         HotkeyManager.shared.register()
 
@@ -82,7 +82,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func handleRefresh() {
+    private func handleToggle() {
         WorkspaceNavigator.shared.toggle { [weak self] order, current in
             guard !order.isEmpty else { return }
             self?.showOrUpdateWorkspaceWindow(workspaces: order, current: current)

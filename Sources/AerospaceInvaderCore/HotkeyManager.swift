@@ -8,7 +8,7 @@ public class HotkeyManager {
     public var onBack: (() -> Void)?
     public var onForward: (() -> Void)?
     public var onExpand: (() -> Void)?
-    public var onRefresh: (() -> Void)?
+    public var onToggle: (() -> Void)?
 
     private init() {}
 
@@ -28,7 +28,7 @@ public class HotkeyManager {
                 case 1: HotkeyManager.shared.onBack?()
                 case 2: HotkeyManager.shared.onForward?()
                 case 3: HotkeyManager.shared.onExpand?()
-                case 4: HotkeyManager.shared.onRefresh?()
+                case 4: HotkeyManager.shared.onToggle?()
                 default: break
                 }
             }
@@ -41,13 +41,13 @@ public class HotkeyManager {
         registerHotkey(config.back, id: 1)
         registerHotkey(config.forward, id: 2)
         registerHotkey(config.expand, id: 3)
-        registerHotkey(config.refresh, id: 4)
+        registerHotkey(config.toggle, id: 4)
 
         let backDesc = ConfigManager.hotkeyDescription(config.back)
         let forwardDesc = ConfigManager.hotkeyDescription(config.forward)
         let expandDesc = ConfigManager.hotkeyDescription(config.expand)
-        let refreshDesc = ConfigManager.hotkeyDescription(config.refresh)
-        fputs("Hotkeys registered: \(backDesc) (back), \(forwardDesc) (forward), \(expandDesc) (expand), \(refreshDesc) (refresh)\n", stderr)
+        let toggleDesc = ConfigManager.hotkeyDescription(config.toggle)
+        fputs("Hotkeys registered: \(backDesc) (back), \(forwardDesc) (forward), \(expandDesc) (expand), \(toggleDesc) (toggle)\n", stderr)
     }
 
     private func registerHotkey(_ config: HotkeyConfig, id: UInt32) {

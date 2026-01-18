@@ -12,7 +12,7 @@ struct ConfigManagerTests {
             "back": { "key": "h", "modifiers": ["command"] },
             "forward": { "key": "l", "modifiers": ["command"] },
             "expand": { "key": "space", "modifiers": ["option"] },
-            "refresh": { "key": "p", "modifiers": ["option"] }
+            "toggle": { "key": "p", "modifiers": ["option"] }
         }
         """
         let json = Data(jsonString.utf8)
