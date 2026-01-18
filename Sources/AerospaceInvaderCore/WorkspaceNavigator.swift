@@ -180,62 +180,24 @@ public class WorkspaceNavigator {
         }
     }
 
-    /// Toggle between current and previous workspace - uses cache for instant response
+    /// Toggle between current and previous workspace using AeroSpace's native command
     public func toggle(completion: @escaping ([String], String?) -> Void) {
-        // Detect manual switches before toggle
-        detectManualSwitch()
+        // Use AeroSpace's native workspace-back-and-forth - it handles state internally
+        AerospaceAPI.workspaceBackAndForth()
 
-        // Capture state and perform toggle atomically
-        let (shouldToggle, order, target, cacheWasEmpty) = withState { () -> (Bool, [String], String?, Bool) in
-            let wasEmpty = _cachedOrder.isEmpty
+        // Brief delay to let AeroSpace complete the switch, then update UI
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            let (workspaces, current) = AerospaceAPI.getWorkspacesWithFocus()
+            let order = OrderManager.shared.mergeWithCurrent(workspaces)
+            OrderManager.shared.saveOrder(order)
 
-            guard !_cachedOrder.isEmpty,
-                  let prev = _previousWorkspace,
-                  _cachedOrder.contains(prev) else {
-                return (false, _cachedOrder, nil, wasEmpty)
+            // Update our cache to stay in sync
+            self?.mutateState {
+                self?._cachedOrder = order
+                self?._cachedFocused = current
             }
 
-            let oldFocused = _cachedFocused
-            _previousWorkspace = oldFocused
-            _cachedFocused = prev
-
-            return (true, _cachedOrder, prev, wasEmpty)
-        }
-
-        if shouldToggle, let target = target {
-            AerospaceAPI.switchToWorkspace(target)
-            completion(order, target)
-        }
-
-        // Refresh cache in background (but don't do manual switch detection -
-        // we just initiated a switch ourselves, detecting it would undo our toggle)
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-
-            if cacheWasEmpty {
-                // Cache was empty - need to refresh and then toggle
-                let (order, target) = self.withState { () -> ([String], String?) in
-                    self._refreshCacheUnsafe()
-
-                    guard let prev = self._previousWorkspace,
-                          self._cachedOrder.contains(prev) else {
-                        return ([], nil)
-                    }
-
-                    let oldFocused = self._cachedFocused
-                    self._previousWorkspace = oldFocused
-                    self._cachedFocused = prev
-
-                    return (self._cachedOrder, prev)
-                }
-
-                if let target = target {
-                    AerospaceAPI.switchToWorkspace(target)
-                    DispatchQueue.main.async { completion(order, target) }
-                }
-            }
-            // If cache was populated, we already toggled - just let refreshCache
-            // happen naturally on next back/forward to avoid racing with our switch
+            completion(order, current)
         }
     }
 
