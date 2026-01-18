@@ -22,6 +22,13 @@ A workspace navigator and on-screen display for [AeroSpace](https://github.com/n
 
 ## Installation
 
+### Homebrew (recommended)
+
+```bash
+brew install dungle-scrubs/aerospace-invader/aerospace-invader
+brew services start aerospace-invader
+```
+
 ### From Source
 
 ```bash
@@ -165,7 +172,3 @@ make test
 ## License
 
 MIT
-
-## Roadmap
-
-- [ ] Add `--help` and `--version` flags
