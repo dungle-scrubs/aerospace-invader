@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-01-18
+
+### Added
+
+- Which-key window auto-closes when AeroSpace mode changes (no more `pkill` needed in config)
+
 ## [0.1.5] - 2026-01-16
 
 ### Fixed
