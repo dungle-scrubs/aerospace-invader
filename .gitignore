@@ -22,3 +22,5 @@ DerivedData/
 .build/
 Packages/
 Package.resolved
+CLAUDE.md
+AGENT.md
