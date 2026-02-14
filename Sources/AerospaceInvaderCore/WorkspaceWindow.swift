@@ -1,18 +1,27 @@
 import Cocoa
 
+/// The main workspace OSD — displays non-empty workspaces as a compact pill bar
+/// or an expanded grid with drag-to-reorder support.
 public class WorkspaceWindow: NSPanel {
+    /// Display mode for the window.
     public enum Mode { case compact, expanded }
 
+    /// Ordered workspace names currently displayed.
     public var workspaces: [String] = []
+    /// Name of the currently focused workspace.
     public var currentWorkspace: String?
+    /// Whether the window is in compact or expanded mode.
     public var mode: Mode = .compact
 
+    /// Called when the user selects a workspace (click/tap).
     public var onSelectWorkspace: ((String) -> Void)?
+    /// Called when the user reorders workspaces via drag.
     public var onOrderChanged: (([String]) -> Void)?
+    /// Called when the window collapses from expanded back to compact.
     public var onCollapse: (() -> Void)?
 
     private var itemViews: [WorkspaceItemView] = []
-    private var backgroundView: NSView!
+    private var backgroundView: NSView
     private var closeButton: NSButton?
     private var hideTimer: Timer?
     private var draggingView: WorkspaceItemView?
@@ -30,6 +39,8 @@ public class WorkspaceWindow: NSPanel {
     private let expandedHeaderHeight: CGFloat = 28
 
     public init() {
+        backgroundView = NSView(frame: .zero)
+
         super.init(
             contentRect: .zero,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -48,6 +59,11 @@ public class WorkspaceWindow: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
     }
 
+    deinit {
+        hideTimer?.invalidate()
+        removeClickOutsideMonitor()
+    }
+
     public override var canBecomeKey: Bool { mode == .expanded }
     public override var canBecomeMain: Bool { false }
 
@@ -59,6 +75,13 @@ public class WorkspaceWindow: NSPanel {
         }
     }
 
+    // MARK: - Show / Hide
+
+    /// Shows the window in compact pill-bar mode.
+    /// - Parameters:
+    ///   - workspaces: Ordered workspace names.
+    ///   - current: The currently focused workspace name.
+    ///   - autoHide: Whether the window auto-hides after 1.5 seconds.
     public func show(workspaces: [String], current: String?, autoHide: Bool = true) {
         self.workspaces = workspaces
         self.currentWorkspace = current
@@ -76,12 +99,15 @@ public class WorkspaceWindow: NSPanel {
         }
     }
 
+    /// Shows the window directly in expanded grid mode.
+    /// - Parameters:
+    ///   - workspaces: Ordered workspace names.
+    ///   - current: The currently focused workspace name.
     public func showExpanded(workspaces: [String], current: String?) {
         self.workspaces = workspaces
         self.currentWorkspace = current
         self.mode = .expanded
 
-        // Enable interaction for expanded mode
         ignoresMouseEvents = false
         level = .popUpMenu
 
@@ -94,7 +120,6 @@ public class WorkspaceWindow: NSPanel {
 
         layoutExpanded(animated: false)
 
-        // Fade in
         alphaValue = 0
         makeKeyAndOrderFront(nil)
         NSAnimationContext.runAnimationGroup { ctx in
@@ -102,21 +127,14 @@ public class WorkspaceWindow: NSPanel {
             self.animator().alphaValue = 1
         }
 
-        // Monitor for click outside
-        clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            guard let self = self, self.mode == .expanded else { return }
-            let screenLoc = NSEvent.mouseLocation
-            if !self.frame.contains(screenLoc) {
-                self.fadeOut()
-            }
-        }
+        installClickOutsideMonitor()
     }
 
+    /// Transitions from compact to expanded mode (animated).
     public func expand() {
         hideTimer?.invalidate()
         mode = .expanded
 
-        // Enable interaction for expanded mode
         ignoresMouseEvents = false
         level = .popUpMenu
 
@@ -126,25 +144,15 @@ public class WorkspaceWindow: NSPanel {
         }
 
         layoutExpanded(animated: true)
-
-        // Make key so we can receive keyboard events
         makeKey()
-
-        // Monitor for click outside
-        clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            guard let self = self, self.mode == .expanded else { return }
-            let screenLoc = NSEvent.mouseLocation
-            if !self.frame.contains(screenLoc) {
-                self.fadeOut()
-            }
-        }
+        installClickOutsideMonitor()
     }
 
+    /// Transitions from expanded back to compact mode (animated).
     public func collapse() {
         removeClickOutsideMonitor()
         mode = .compact
 
-        // Restore non-interactive state for compact mode
         ignoresMouseEvents = true
         level = .floating
 
@@ -157,10 +165,10 @@ public class WorkspaceWindow: NSPanel {
         onCollapse?()
     }
 
+    /// Fades the window out and resets to compact state.
     public func fadeOut() {
         removeClickOutsideMonitor()
 
-        // Restore non-interactive state
         ignoresMouseEvents = true
         level = .floating
 
@@ -171,11 +179,23 @@ public class WorkspaceWindow: NSPanel {
             self.orderOut(nil)
             self.alphaValue = 1
             self.mode = .compact
-            // Reset item views for next show
             for item in self.itemViews {
                 item.isExpanded = false
             }
         })
+    }
+
+    // MARK: - Click Outside Monitor
+
+    private func installClickOutsideMonitor() {
+        removeClickOutsideMonitor()
+        clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            guard let self = self, self.mode == .expanded else { return }
+            let screenLoc = NSEvent.mouseLocation
+            if !self.frame.contains(screenLoc) {
+                self.fadeOut()
+            }
+        }
     }
 
     private func removeClickOutsideMonitor() {
@@ -185,12 +205,14 @@ public class WorkspaceWindow: NSPanel {
         }
     }
 
+    // MARK: - View Hierarchy
+
     private func rebuildViews() {
         itemViews.forEach { $0.removeFromSuperview() }
         itemViews.removeAll()
         closeButton?.removeFromSuperview()
         closeButton = nil
-        backgroundView?.removeFromSuperview()
+        backgroundView.removeFromSuperview()
 
         // Create background
         backgroundView = NSView(frame: .zero)
@@ -203,17 +225,18 @@ public class WorkspaceWindow: NSPanel {
         contentView = backgroundView
 
         // Create close button (hidden initially, shown in expanded mode)
-        closeButton = NSButton(frame: NSRect(x: 8, y: 0, width: 16, height: 16))
-        closeButton?.bezelStyle = .circular
-        closeButton?.isBordered = false
-        closeButton?.wantsLayer = true
-        closeButton?.layer?.backgroundColor = NSColor(red: 1, green: 0.3, blue: 0.3, alpha: 1).cgColor
-        closeButton?.layer?.cornerRadius = 8
-        closeButton?.title = ""
-        closeButton?.target = self
-        closeButton?.action = #selector(closeButtonClicked)
-        closeButton?.isHidden = true
-        backgroundView.addSubview(closeButton!)
+        let btn = NSButton(frame: NSRect(x: 8, y: 0, width: 16, height: 16))
+        btn.bezelStyle = .circular
+        btn.isBordered = false
+        btn.wantsLayer = true
+        btn.layer?.backgroundColor = NSColor(red: 1, green: 0.3, blue: 0.3, alpha: 1).cgColor
+        btn.layer?.cornerRadius = 8
+        btn.title = ""
+        btn.target = self
+        btn.action = #selector(closeButtonClicked)
+        btn.isHidden = true
+        backgroundView.addSubview(btn)
+        closeButton = btn
 
         // Create item views
         for (i, ws) in workspaces.enumerated() {
@@ -243,22 +266,24 @@ public class WorkspaceWindow: NSPanel {
         fadeOut()
     }
 
+    // MARK: - Layout
+
     private func layoutCompact(animated: Bool) {
-        guard let screen = NSScreen.main else { return }
+        guard let screen = NSScreen.main else {
+            fputs("WorkspaceWindow: no main screen available for layout\n", stderr)
+            return
+        }
         let visibleFrame = screen.visibleFrame
 
-        // Hide close button in compact mode
         closeButton?.isHidden = true
 
         // Calculate pill widths
         var totalWidth: CGFloat = 16
-        var pillWidths: [CGFloat] = []
-
-        for ws in workspaces {
+        let pillWidths: [CGFloat] = workspaces.map { ws in
             let textWidth = (ws as NSString).size(withAttributes: [.font: Style.font]).width
             let width = textWidth + compactPadding * 2
-            pillWidths.append(width)
             totalWidth += width + compactSpacing
+            return width
         }
         totalWidth += 8
 
@@ -279,6 +304,7 @@ public class WorkspaceWindow: NSPanel {
             let yPos: CGFloat = 8
 
             for (i, item) in itemViews.enumerated() {
+                guard i < pillWidths.count else { break }
                 item.animator().frame = NSRect(x: xPos, y: yPos, width: pillWidths[i], height: compactHeight)
                 xPos += pillWidths[i] + compactSpacing
             }
@@ -286,17 +312,18 @@ public class WorkspaceWindow: NSPanel {
     }
 
     private func layoutExpanded(animated: Bool) {
-        guard let screen = NSScreen.main, !workspaces.isEmpty else { return }
+        guard let screen = NSScreen.main, !workspaces.isEmpty else {
+            fputs("WorkspaceWindow: cannot layout expanded — no screen or empty workspaces\n", stderr)
+            return
+        }
         let visibleFrame = screen.visibleFrame
 
         let cols = min(workspaces.count, 5)
         let rows = (workspaces.count + cols - 1) / cols
 
-        // Add extra space at top for close button
         let windowWidth = CGFloat(cols) * (expandedItemSize + expandedSpacing) - expandedSpacing + expandedPadding * 2
         let windowHeight = CGFloat(rows) * (expandedItemSize + expandedSpacing) - expandedSpacing + expandedPadding * 2 + expandedHeaderHeight
 
-        // Center on screen
         let windowX = visibleFrame.midX - windowWidth / 2
         let windowY = visibleFrame.midY - windowHeight / 2
 
@@ -309,7 +336,6 @@ public class WorkspaceWindow: NSPanel {
             self.animator().setFrame(NSRect(x: windowX, y: windowY, width: windowWidth, height: windowHeight), display: true)
             self.backgroundView.animator().frame = NSRect(x: 0, y: 0, width: windowWidth, height: windowHeight)
 
-            // Position close button in upper left with even spacing
             let closeButtonMargin: CGFloat = 12
             self.closeButton?.frame = NSRect(x: closeButtonMargin, y: windowHeight - closeButtonMargin - 14, width: 14, height: 14)
             self.closeButton?.isHidden = false
@@ -341,10 +367,11 @@ public class WorkspaceWindow: NSPanel {
         let clampedCol = max(0, min(col, cols - 1))
         let clampedRow = max(0, row)
 
-        var index = clampedRow * cols + clampedCol
-        index = max(0, min(index, workspaces.count - 1))
-        return index
+        let index = clampedRow * cols + clampedCol
+        return max(0, min(index, workspaces.count - 1))
     }
+
+    // MARK: - Drag Reorder
 
     private func handleDragMove(to point: NSPoint) {
         guard mode == .expanded, let dragging = draggingView else { return }
@@ -352,25 +379,27 @@ public class WorkspaceWindow: NSPanel {
         let targetIndex = indexForPoint(point)
         let currentIndex = dragging.index
 
-        if targetIndex != currentIndex {
-            let item = workspaces.remove(at: currentIndex)
-            workspaces.insert(item, at: targetIndex)
+        guard targetIndex != currentIndex,
+              targetIndex < workspaces.count,
+              currentIndex < workspaces.count else { return }
 
-            for (i, ws) in workspaces.enumerated() {
-                if let view = itemViews.first(where: { $0.workspace == ws }) {
-                    view.index = i
-                }
+        let item = workspaces.remove(at: currentIndex)
+        workspaces.insert(item, at: targetIndex)
+
+        for (i, ws) in workspaces.enumerated() {
+            if let view = itemViews.first(where: { $0.workspace == ws }) {
+                view.index = i
             }
-
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.15
-                for view in itemViews where view !== dragging {
-                    view.animator().frame = expandedFrameForIndex(view.index, windowHeight: backgroundView.bounds.height, headerHeight: expandedHeaderHeight)
-                }
-            }
-
-            onOrderChanged?(workspaces)
         }
+
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            for view in itemViews where view !== dragging {
+                view.animator().frame = expandedFrameForIndex(view.index, windowHeight: backgroundView.bounds.height, headerHeight: expandedHeaderHeight)
+            }
+        }
+
+        onOrderChanged?(workspaces)
     }
 
     private func handleDragEnd() {
