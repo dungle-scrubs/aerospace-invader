@@ -1,4 +1,5 @@
 @testable import AerospaceInvaderCore
+import Foundation
 import Testing
 
 @Suite("OrderManager")
@@ -38,13 +39,11 @@ struct OrderManagerTests {
 
     @Test("preserves custom order for existing")
     func mergePreservesCustomOrderForExisting() {
-        // User reordered B before A
         let saved = ["B", "A", "C"]
         let current = ["A", "B", "C"]
 
         let result = OrderManager.merge(saved: saved, current: current)
 
-        // Custom order should be preserved
         #expect(result == ["B", "A", "C"])
     }
 
@@ -55,7 +54,6 @@ struct OrderManagerTests {
 
         let result = OrderManager.merge(saved: saved, current: current)
 
-        // Preserved order first, then new ones in their original order
         #expect(result == ["C", "A", "B", "D"])
     }
 
@@ -96,18 +94,39 @@ struct OrderManagerTests {
 
         let result = OrderManager.merge(saved: saved, current: current)
 
-        // None of saved exist anymore, so just return current order
         #expect(result == ["A", "B", "C"])
     }
 
     @Test("produces no duplicates")
     func mergeNoDuplicates() {
-        let saved = ["A", "B", "A", "C"]  // Malformed saved with duplicate
+        let saved = ["A", "B", "A", "C"]
         let current = ["A", "B", "C"]
 
         let result = OrderManager.merge(saved: saved, current: current)
 
-        // Should not have duplicates
         #expect(Set(result).count == result.count)
+    }
+
+    // MARK: - MockOrderProvider integration
+
+    @Test("mock order provider mergeWithCurrent uses merge logic")
+    func mockMergeWithCurrent() {
+        let provider = MockOrderProvider()
+        provider.savedOrder = ["C", "A"]
+
+        let result = provider.mergeWithCurrent(["A", "B", "C"])
+
+        #expect(result == ["C", "A", "B"])
+    }
+
+    @Test("mock order provider tracks save calls")
+    func mockSaveTracking() {
+        let provider = MockOrderProvider()
+
+        provider.saveOrder(["A", "B"])
+        provider.saveOrder(["A", "B", "C"])
+
+        #expect(provider.saveCount == 2)
+        #expect(provider.savedOrder == ["A", "B", "C"])
     }
 }
