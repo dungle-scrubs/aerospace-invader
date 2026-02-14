@@ -1,7 +1,7 @@
 import AerospaceInvaderCore
 import Cocoa
 
-let version = "0.2.1"
+let version = "0.2.1" // x-release-please-version
 
 func printHelp() {
     print("""

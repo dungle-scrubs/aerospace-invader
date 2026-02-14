@@ -4,7 +4,7 @@ excluded:
 disabled_rules:
   - type_body_length
   - function_body_length
-  - implicitly_unwrapped_optional
-  - force_unwrapping
   - identifier_name
   - line_length
+  - large_tuple
+  - file_length

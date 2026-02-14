@@ -1,8 +1,8 @@
-name: Release
+name: Release Binaries
+
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
 
 jobs:
   build:
@@ -20,15 +20,15 @@ jobs:
         run: |
           mkdir -p dist
           cp .build/${{ matrix.arch }}-apple-macosx/release/aerospace-invader dist/
-          tar -czvf aerospace-invader-${{ github.ref_name }}-darwin-${{ matrix.arch }}.tar.gz -C dist aerospace-invader
+          tar -czvf aerospace-invader-${{ github.event.release.tag_name }}-darwin-${{ matrix.arch }}.tar.gz -C dist aerospace-invader
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: aerospace-invader-darwin-${{ matrix.arch }}
-          path: aerospace-invader-${{ github.ref_name }}-darwin-${{ matrix.arch }}.tar.gz
+          path: aerospace-invader-${{ github.event.release.tag_name }}-darwin-${{ matrix.arch }}.tar.gz
 
-  release:
+  attach-binaries:
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -42,38 +42,28 @@ jobs:
       - name: Calculate SHA256
         id: sha
         run: |
-          ARM_SHA=$(shasum -a 256 aerospace-invader-darwin-arm64/aerospace-invader-${{ github.ref_name }}-darwin-arm64.tar.gz | cut -d' ' -f1)
-          X86_SHA=$(shasum -a 256 aerospace-invader-darwin-x86_64/aerospace-invader-${{ github.ref_name }}-darwin-x86_64.tar.gz | cut -d' ' -f1)
+          ARM_SHA=$(shasum -a 256 aerospace-invader-darwin-arm64/aerospace-invader-${{ github.event.release.tag_name }}-darwin-arm64.tar.gz | cut -d' ' -f1)
+          X86_SHA=$(shasum -a 256 aerospace-invader-darwin-x86_64/aerospace-invader-${{ github.event.release.tag_name }}-darwin-x86_64.tar.gz | cut -d' ' -f1)
           echo "arm64_sha=$ARM_SHA" >> $GITHUB_OUTPUT
           echo "x86_64_sha=$X86_SHA" >> $GITHUB_OUTPUT
 
-      - name: Create Release
+      - name: Upload binaries to release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            aerospace-invader-darwin-arm64/aerospace-invader-${{ github.ref_name }}-darwin-arm64.tar.gz
-            aerospace-invader-darwin-x86_64/aerospace-invader-${{ github.ref_name }}-darwin-x86_64.tar.gz
+          tag_name: ${{ github.event.release.tag_name }}
+          append_body: true
           body: |
-            ## Installation
-
-            ### Homebrew (recommended)
-
-            ```bash
-            brew install dungle-scrubs/aerospace-invader/aerospace-invader
-            brew services start aerospace-invader
-            ```
-
-            ### Manual download
+            ## Binaries
 
             **Apple Silicon (M1/M2/M3):**
             ```bash
-            curl -L https://github.com/dungle-scrubs/aerospace-invader/releases/download/${{ github.ref_name }}/aerospace-invader-${{ github.ref_name }}-darwin-arm64.tar.gz | tar xz
+            curl -L https://github.com/dungle-scrubs/aerospace-invader/releases/download/${{ github.event.release.tag_name }}/aerospace-invader-${{ github.event.release.tag_name }}-darwin-arm64.tar.gz | tar xz
             mv aerospace-invader /usr/local/bin/
             ```
 
             **Intel:**
             ```bash
-            curl -L https://github.com/dungle-scrubs/aerospace-invader/releases/download/${{ github.ref_name }}/aerospace-invader-${{ github.ref_name }}-darwin-x86_64.tar.gz | tar xz
+            curl -L https://github.com/dungle-scrubs/aerospace-invader/releases/download/${{ github.event.release.tag_name }}/aerospace-invader-${{ github.event.release.tag_name }}-darwin-x86_64.tar.gz | tar xz
             mv aerospace-invader /usr/local/bin/
             ```
 
@@ -83,9 +73,12 @@ jobs:
             |--------------|--------|
             | arm64 | `${{ steps.sha.outputs.arm64_sha }}` |
             | x86_64 | `${{ steps.sha.outputs.x86_64_sha }}` |
+          files: |
+            aerospace-invader-darwin-arm64/aerospace-invader-${{ github.event.release.tag_name }}-darwin-arm64.tar.gz
+            aerospace-invader-darwin-x86_64/aerospace-invader-${{ github.event.release.tag_name }}-darwin-x86_64.tar.gz
 
   update-formula:
-    needs: release
+    needs: attach-binaries
     runs-on: macos-latest
     permissions:
       contents: write
@@ -94,21 +87,21 @@ jobs:
         with:
           ref: main
 
-      - name: Download arm64 tarball and calculate SHA
+      - name: Download source tarball and calculate SHA
         run: |
-          curl -L -o release.tar.gz "https://github.com/dungle-scrubs/aerospace-invader/archive/refs/tags/${{ github.ref_name }}.tar.gz"
+          curl -L -o release.tar.gz "https://github.com/dungle-scrubs/aerospace-invader/archive/refs/tags/${{ github.event.release.tag_name }}.tar.gz"
           SHA=$(shasum -a 256 release.tar.gz | cut -d' ' -f1)
           echo "SHA256=$SHA" >> $GITHUB_ENV
 
       - name: Update formula
         run: |
           sed -i '' "s/sha256 \".*\"/sha256 \"$SHA256\"/" Formula/aerospace-invader.rb
-          sed -i '' "s|/v[0-9]*\.[0-9]*\.[0-9]*.tar.gz|/${{ github.ref_name }}.tar.gz|g" Formula/aerospace-invader.rb
+          sed -i '' "s|/v[0-9]*\.[0-9]*\.[0-9]*.tar.gz|/${{ github.event.release.tag_name }}.tar.gz|g" Formula/aerospace-invader.rb
 
       - name: Commit formula update
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add Formula/aerospace-invader.rb
-          git diff --staged --quiet || git commit -m "Update formula for ${{ github.ref_name }}"
+          git diff --staged --quiet || git commit -m "chore(formula): update for ${{ github.event.release.tag_name }}"
           git push origin main

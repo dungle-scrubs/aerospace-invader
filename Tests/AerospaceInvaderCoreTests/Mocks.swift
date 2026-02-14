@@ -11,7 +11,7 @@ final class MockAerospaceAPI: AerospaceCommandExecutor {
     var ensureEnabledResult: Result<Void, AerospaceError> = .success(())
     var workspacesWithFocus: (workspaces: [String], focused: String?) = ([], nil)
     var currentMode: String? = "main"
-    var bindings: [String: String]? = nil
+    var bindings: [String: String]?
 
     /// Records every workspace switch request.
     var switchedWorkspaces: [String] = []
