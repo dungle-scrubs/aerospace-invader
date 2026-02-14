@@ -1,13 +1,20 @@
 import Cocoa
-import CoreGraphics
 
+/// A popup overlay that shows the keybindings for an AeroSpace mode (e.g. service, resize).
+/// Auto-dismisses when the user exits the mode or presses Escape/clicks outside.
 public class WhichKeyWindow: NSPanel {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var modeCheckTimer: Timer?
     private var targetMode: String?
 
-    public init() {
+    /// Reference to the aerospace API for mode polling.
+    private let api: AerospaceCommandExecutor
+
+    /// Creates a which-key window.
+    /// - Parameter api: The aerospace API to use for fetching bindings and polling mode changes.
+    public init(api: AerospaceCommandExecutor = AerospaceAPI.shared) {
+        self.api = api
         super.init(
             contentRect: .zero,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -22,9 +29,15 @@ public class WhichKeyWindow: NSPanel {
         hasShadow = true
     }
 
-    public func show(mode: String) {
+    deinit {
+        modeCheckTimer?.invalidate()
+        cleanupEventTap()
+    }
 
-        guard let bindings = AerospaceAPI.getBindings(mode: mode) else {
+    /// Displays the which-key window for the given AeroSpace mode.
+    /// - Parameter mode: The mode name (e.g. "service", "resize").
+    public func show(mode: String) {
+        guard let bindings = api.getBindings(mode: mode) else {
             fputs("Failed to get bindings for mode: \(mode)\n", stderr)
             return
         }
@@ -34,21 +47,22 @@ public class WhichKeyWindow: NSPanel {
         rebuildUI(groups: grouped)
         makeKeyAndOrderFront(nil)
 
-        // Use CGEventTap to catch keys at a lower level than AeroSpace
         setupEventTap()
 
-        // Poll for mode changes to auto-close when user executes a binding
-        // Delay start to allow mode to settle after aerospace enters it
+        // Delay mode-check to let AeroSpace settle after entering the mode
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             self?.startModeCheckTimer()
         }
     }
 
+    // MARK: - Mode Polling
+
     private func startModeCheckTimer() {
         modeCheckTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
             guard let self = self, let target = self.targetMode else { return }
-            DispatchQueue.global(qos: .userInitiated).async {
-                guard let current = AerospaceAPI.getCurrentMode(), current != target else { return }
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self = self else { return }
+                guard let current = self.api.getCurrentMode(), current != target else { return }
                 DispatchQueue.main.async {
                     self.fadeOut()
                 }
@@ -56,26 +70,20 @@ public class WhichKeyWindow: NSPanel {
         }
     }
 
+    // MARK: - Event Tap
+
     private func setupEventTap() {
-        // Create a callback that references self via pointer
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
             guard let userInfo = userInfo else { return Unmanaged.passUnretained(event) }
             let window = Unmanaged<WhichKeyWindow>.fromOpaque(userInfo).takeUnretainedValue()
 
-            // Note: Key events in service mode are intercepted by AeroSpace before
-            // reaching this tap. The aerospace config handles closing the window
-            // when exiting service mode. This tap catches mouse clicks to dismiss.
             if type == .keyDown {
                 let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
                 if keyCode == 53 { // Escape
-                    DispatchQueue.main.async {
-                        window.fadeOut()
-                    }
+                    DispatchQueue.main.async { window.fadeOut() }
                 }
             } else if type == .leftMouseDown || type == .rightMouseDown {
-                DispatchQueue.main.async {
-                    window.fadeOut()
-                }
+                DispatchQueue.main.async { window.fadeOut() }
             }
 
             return Unmanaged.passUnretained(event)
@@ -83,12 +91,10 @@ public class WhichKeyWindow: NSPanel {
 
         let selfPointer = Unmanaged.passUnretained(self).toOpaque()
 
-        // Listen for key down and mouse clicks
         let eventMask: CGEventMask = (1 << CGEventType.keyDown.rawValue) |
             (1 << CGEventType.leftMouseDown.rawValue) |
             (1 << CGEventType.rightMouseDown.rawValue)
 
-        // Create a passive event tap (listenOnly doesn't intercept)
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
@@ -97,7 +103,7 @@ public class WhichKeyWindow: NSPanel {
             callback: callback,
             userInfo: selfPointer
         ) else {
-            fputs("Failed to create event tap - accessibility permissions may be required\n", stderr)
+            fputs("Failed to create event tap — accessibility permissions may be required\n", stderr)
             return
         }
 
@@ -121,6 +127,7 @@ public class WhichKeyWindow: NSPanel {
         runLoopSource = nil
     }
 
+    /// Fades the window out, cleans up resources, and terminates the app.
     public func fadeOut() {
         modeCheckTimer?.invalidate()
         modeCheckTimer = nil
@@ -133,6 +140,38 @@ public class WhichKeyWindow: NSPanel {
         })
     }
 
+    // MARK: - Binding Categorization
+
+    /// Modifier replacements used by `formatKey` — ordered longest-first to avoid partial matches.
+    private static let keyReplacements: [(from: String, to: String)] = [
+        ("shift-ctrl-alt-", "⌃⌥⇧"),
+        ("ctrl-alt-", "⌃⌥"),
+        ("alt-shift-", "⌥⇧"),
+        ("alt-", "⌥"),
+        ("shift-", "⇧"),
+        ("ctrl-", "⌃"),
+        ("cmd-", "⌘"),
+        ("backspace", "⌫"),
+        ("esc", "Esc"),
+        ("semicolon", ";"),
+        ("comma", ","),
+        ("slash", "/")
+    ]
+
+    /// Command simplifications used by `formatCmd`.
+    private static let cmdReplacements: [(from: String, to: String)] = [
+        ("; mode main", ""),
+        ("flatten-workspace-tree", "flatten"),
+        ("close-all-windows-but-current", "close others"),
+        ("layout floating tiling", "toggle float"),
+        ("reload-config", "reload"),
+        ("join-with ", "join "),
+        ("enable toggle", "toggle enable")
+    ]
+
+    /// Groups bindings into categories for display.
+    /// - Parameter bindings: Raw key → command mappings from AeroSpace.
+    /// - Returns: Named groups with sorted items, in display order.
     private func groupBindings(_ bindings: [String: String]) -> [(name: String, items: [(key: String, cmd: String)])] {
         var groups: [String: [(key: String, cmd: String)]] = [
             "Movement": [], "Layout": [], "Actions": [], "Exit": []
@@ -153,6 +192,11 @@ public class WhichKeyWindow: NSPanel {
         }
     }
 
+    /// Categorizes a binding into Movement, Layout, Exit, or Actions.
+    /// - Parameters:
+    ///   - key: The key string (e.g. "h", "alt-shift-h").
+    ///   - cmd: The command string (e.g. "focus left", "layout h_accordion").
+    /// - Returns: Category name.
     private func categorize(key: String, cmd: String) -> String {
         if cmd.hasPrefix("move ") || cmd.hasPrefix("join-with ") || cmd.hasPrefix("focus ") {
             return "Movement"
@@ -166,34 +210,29 @@ public class WhichKeyWindow: NSPanel {
         return "Actions"
     }
 
+    /// Converts modifier/key strings to readable symbols.
+    /// - Parameter key: Raw key string from AeroSpace config.
+    /// - Returns: Human-readable key representation.
     private func formatKey(_ key: String) -> String {
-        var r = key
-        r = r.replacingOccurrences(of: "shift-ctrl-alt-", with: "⌃⌥⇧")
-        r = r.replacingOccurrences(of: "ctrl-alt-", with: "⌃⌥")
-        r = r.replacingOccurrences(of: "alt-shift-", with: "⌥⇧")
-        r = r.replacingOccurrences(of: "alt-", with: "⌥")
-        r = r.replacingOccurrences(of: "shift-", with: "⇧")
-        r = r.replacingOccurrences(of: "ctrl-", with: "⌃")
-        r = r.replacingOccurrences(of: "cmd-", with: "⌘")
-        r = r.replacingOccurrences(of: "backspace", with: "⌫")
-        r = r.replacingOccurrences(of: "esc", with: "Esc")
-        r = r.replacingOccurrences(of: "semicolon", with: ";")
-        r = r.replacingOccurrences(of: "comma", with: ",")
-        r = r.replacingOccurrences(of: "slash", with: "/")
-        return r
+        var result = key
+        for replacement in Self.keyReplacements {
+            result = result.replacingOccurrences(of: replacement.from, with: replacement.to)
+        }
+        return result
     }
 
+    /// Simplifies command strings for display.
+    /// - Parameter cmd: Raw command string from AeroSpace config.
+    /// - Returns: Shortened, human-readable command.
     private func formatCmd(_ cmd: String) -> String {
-        var r = cmd
-        r = r.replacingOccurrences(of: "; mode main", with: "")
-        r = r.replacingOccurrences(of: "flatten-workspace-tree", with: "flatten")
-        r = r.replacingOccurrences(of: "close-all-windows-but-current", with: "close others")
-        r = r.replacingOccurrences(of: "layout floating tiling", with: "toggle float")
-        r = r.replacingOccurrences(of: "reload-config", with: "reload")
-        r = r.replacingOccurrences(of: "join-with ", with: "join ")
-        r = r.replacingOccurrences(of: "enable toggle", with: "toggle enable")
-        return r
+        var result = cmd
+        for replacement in Self.cmdReplacements {
+            result = result.replacingOccurrences(of: replacement.from, with: replacement.to)
+        }
+        return result
     }
+
+    // MARK: - UI
 
     private func rebuildUI(groups: [(name: String, items: [(key: String, cmd: String)])]) {
         let font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
@@ -208,7 +247,10 @@ public class WhichKeyWindow: NSPanel {
         let width: CGFloat = 360
         let height = titleHeight + CGFloat(totalLines) * lineHeight + CGFloat(groups.count) * (headerHeight + 8) + padding * 2
 
-        guard let screen = NSScreen.main else { return }
+        guard let screen = NSScreen.main else {
+            fputs("WhichKeyWindow: no main screen available for layout\n", stderr)
+            return
+        }
         let x = screen.frame.maxX - width - 20
         let y = screen.visibleFrame.minY + 20
 
@@ -240,7 +282,6 @@ public class WhichKeyWindow: NSPanel {
         var yPos = height - padding - titleHeight - 8
 
         for group in groups {
-            // Header
             let header = NSTextField(labelWithString: group.name)
             header.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
             header.textColor = NSColor(white: 0.5, alpha: 1)
@@ -248,7 +289,6 @@ public class WhichKeyWindow: NSPanel {
             header.frame = NSRect(x: padding, y: yPos, width: width - padding * 2, height: headerHeight)
             contentView?.addSubview(header)
 
-            // Items
             for item in group.items {
                 yPos -= lineHeight
 
