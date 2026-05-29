@@ -52,7 +52,12 @@ let delegate = AppDelegate()
 
 // Parse mode args
 if CommandLine.arguments.count > 1 {
-    delegate.mode = CommandLine.arguments[1]
+    guard let mode = AppMode(rawValue: CommandLine.arguments[1]) else {
+        fputs("Unknown mode: \(CommandLine.arguments[1])\n", stderr)
+        fputs("Usage: aerospace-invader [daemon|tabs|expand|whichkey <mode>|hide]\n", stderr)
+        exit(1)
+    }
+    delegate.mode = mode
 }
 if CommandLine.arguments.count > 2 {
     delegate.modeArg = CommandLine.arguments[2]

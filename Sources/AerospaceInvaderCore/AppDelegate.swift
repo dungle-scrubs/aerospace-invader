@@ -1,5 +1,10 @@
 import Cocoa
 
+/// A command mode the app can launch in, parsed from the first CLI argument.
+public enum AppMode: String {
+    case daemon, tabs, expand, whichkey, hide
+}
+
 /// Application delegate — routes commands and wires dependencies.
 /// Responsibilities are limited to lifecycle, mode routing, and dependency wiring.
 public class AppDelegate: NSObject, NSApplicationDelegate {
@@ -8,12 +13,12 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     /// The which-key popup (created per invocation).
     public var whichKeyWindow: WhichKeyWindow?
 
-    /// The command mode to execute (daemon, tabs, expand, whichkey, hide).
-    public var mode: String = "daemon"
+    /// The command mode to execute.
+    public var mode: AppMode = .daemon
     /// Optional argument for the mode (e.g. mode name for whichkey).
     public var modeArg: String?
     /// Whether the app is running as a persistent daemon.
-    public var isDaemon: Bool { mode == "daemon" }
+    public var isDaemon: Bool { mode == .daemon }
 
     // Dependencies — defaulting to shared singletons
     private let api: AerospaceCommandExecutor
@@ -41,7 +46,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - App Lifecycle
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
-        if mode != "hide" {
+        if mode != .hide {
             switch api.ensureEnabled() {
             case .success:
                 break
@@ -52,15 +57,11 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         switch mode {
-        case "daemon":  startDaemon()
-        case "tabs":    showWorkspaceWindow(expanded: false, autoHide: true)
-        case "expand":  showWorkspaceWindow(expanded: true, autoHide: false)
-        case "whichkey": showWhichKey(mode: modeArg ?? "service")
-        case "hide":    NSApp.terminate(nil)
-        default:
-            fputs("Unknown mode: \(mode)\n", stderr)
-            fputs("Usage: aerospace-invader [daemon|tabs|expand|whichkey <mode>]\n", stderr)
-            NSApp.terminate(nil)
+        case .daemon:   startDaemon()
+        case .tabs:     showWorkspaceWindow(expanded: false, autoHide: true)
+        case .expand:   showWorkspaceWindow(expanded: true, autoHide: false)
+        case .whichkey: showWhichKey(mode: modeArg ?? "service")
+        case .hide:     NSApp.terminate(nil)
         }
     }
 
