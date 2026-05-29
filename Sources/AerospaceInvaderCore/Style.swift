@@ -17,4 +17,16 @@ public struct Style {
     public static let inactiveColor = NSColor(white: 0.5, alpha: 1)
     /// Default text color (white).
     public static let textColor = NSColor.white
+    /// Dimmed text for secondary content (e.g. which-key command descriptions).
+    public static let secondaryTextColor = NSColor(white: 0.7, alpha: 1)
+    /// Thin separator line color.
+    public static let separatorColor = NSColor(white: 0.3, alpha: 1)
+    /// Amber accent for which-key key labels.
+    public static let keyColor = NSColor(red: 1, green: 0.8, blue: 0, alpha: 1)
+    /// Background for the active workspace tile in expanded grid view.
+    public static let tileActiveColor = NSColor(red: 0.2, green: 0.7, blue: 0.4, alpha: 1)
+    /// Background for inactive workspace tiles in expanded grid view.
+    public static let tileInactiveColor = NSColor(white: 0.25, alpha: 1)
+    /// Faint green fill behind the active workspace pill in compact view.
+    public static let activeHighlightColor = NSColor(red: 0, green: 1, blue: 0, alpha: 0.15)
 }

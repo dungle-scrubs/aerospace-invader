@@ -70,11 +70,11 @@ public class WorkspaceItemView: NSView {
         if isExpanded {
             layer?.cornerRadius = 10
             if isActive {
-                layer?.backgroundColor = NSColor(red: 0.2, green: 0.7, blue: 0.4, alpha: 1).cgColor
+                layer?.backgroundColor = Style.tileActiveColor.cgColor
                 layer?.borderColor = Style.activeColor.cgColor
                 layer?.borderWidth = 2
             } else {
-                layer?.backgroundColor = NSColor(white: 0.25, alpha: 1).cgColor
+                layer?.backgroundColor = Style.tileInactiveColor.cgColor
                 layer?.borderWidth = 0
             }
             label.textColor = .white
@@ -82,7 +82,7 @@ public class WorkspaceItemView: NSView {
         } else {
             layer?.cornerRadius = 4
             if isActive {
-                layer?.backgroundColor = NSColor(red: 0, green: 1, blue: 0, alpha: 0.15).cgColor
+                layer?.backgroundColor = Style.activeHighlightColor.cgColor
                 layer?.borderColor = Style.borderColor.cgColor
                 layer?.borderWidth = 1
                 label.textColor = Style.activeColor

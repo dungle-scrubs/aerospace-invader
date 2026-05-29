@@ -1,3 +1,4 @@
+import Carbon.HIToolbox
 import Cocoa
 
 /// A popup overlay that shows the keybindings for an AeroSpace mode (e.g. service, resize).
@@ -79,7 +80,7 @@ public class WhichKeyWindow: NSPanel {
 
             if type == .keyDown {
                 let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-                if keyCode == 53 { // Escape
+                if keyCode == Int64(kVK_Escape) {
                     DispatchQueue.main.async { window.fadeOut() }
                 }
             } else if type == .leftMouseDown || type == .rightMouseDown {
@@ -275,7 +276,7 @@ public class WhichKeyWindow: NSPanel {
         // Separator
         let sep = NSView(frame: NSRect(x: padding, y: height - padding - titleHeight, width: width - padding * 2, height: 1))
         sep.wantsLayer = true
-        sep.layer?.backgroundColor = NSColor(white: 0.3, alpha: 1).cgColor
+        sep.layer?.backgroundColor = Style.separatorColor.cgColor
         contentView?.addSubview(sep)
 
         // Groups
@@ -284,7 +285,7 @@ public class WhichKeyWindow: NSPanel {
         for group in groups {
             let header = NSTextField(labelWithString: group.name)
             header.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-            header.textColor = NSColor(white: 0.5, alpha: 1)
+            header.textColor = Style.inactiveColor
             yPos -= headerHeight
             header.frame = NSRect(x: padding, y: yPos, width: width - padding * 2, height: headerHeight)
             contentView?.addSubview(header)
@@ -294,13 +295,13 @@ public class WhichKeyWindow: NSPanel {
 
                 let keyLabel = NSTextField(labelWithString: formatKey(item.key))
                 keyLabel.font = font
-                keyLabel.textColor = NSColor(red: 1, green: 0.8, blue: 0, alpha: 1)
+                keyLabel.textColor = Style.keyColor
                 keyLabel.frame = NSRect(x: padding + 8, y: yPos, width: 80, height: lineHeight)
                 contentView?.addSubview(keyLabel)
 
                 let cmdLabel = NSTextField(labelWithString: formatCmd(item.cmd))
                 cmdLabel.font = font
-                cmdLabel.textColor = NSColor(white: 0.7, alpha: 1)
+                cmdLabel.textColor = Style.secondaryTextColor
                 cmdLabel.lineBreakMode = .byTruncatingTail
                 cmdLabel.frame = NSRect(x: padding + 100, y: yPos, width: width - padding - 108, height: lineHeight)
                 contentView?.addSubview(cmdLabel)
@@ -311,7 +312,7 @@ public class WhichKeyWindow: NSPanel {
     }
 
     public override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 { // Escape
+        if event.keyCode == UInt16(kVK_Escape) {
             fadeOut()
         }
     }

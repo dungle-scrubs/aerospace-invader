@@ -1,3 +1,4 @@
+import Carbon.HIToolbox
 import Cocoa
 
 /// The main workspace OSD — displays non-empty workspaces as a compact pill bar
@@ -68,7 +69,7 @@ public class WorkspaceWindow: NSPanel {
     public override var canBecomeMain: Bool { false }
 
     public override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 && mode == .expanded { // Escape
+        if event.keyCode == UInt16(kVK_Escape) && mode == .expanded {
             fadeOut()
         } else {
             super.keyDown(with: event)
