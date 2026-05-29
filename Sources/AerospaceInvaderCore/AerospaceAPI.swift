@@ -54,13 +54,8 @@ public class AerospaceAPI: AerospaceCommandExecutor {
     /// Searches `$PATH` for the aerospace binary using `which`.
     /// - Returns: Absolute path if found, nil otherwise.
     private func resolveFromPath() -> String? {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        task.arguments = ["aerospace"]
-
         let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = FileHandle.nullDevice
+        let task = makeProcess(executable: "/usr/bin/which", arguments: ["aerospace"], stdout: pipe)
 
         do {
             try task.run()
@@ -70,8 +65,24 @@ public class AerospaceAPI: AerospaceCommandExecutor {
         }
 
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let path = decodeOutput(data)
         return path.isEmpty ? nil : path
+    }
+
+    /// Builds a `Process` for `executable` with the given arguments, discarding stderr.
+    /// - Parameter stdout: A `Pipe` to capture stdout, or `nil` to discard it.
+    private func makeProcess(executable: String, arguments: [String], stdout: Pipe?) -> Process {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: executable)
+        task.arguments = arguments
+        task.standardOutput = stdout ?? FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        return task
+    }
+
+    /// Decodes process output to a trimmed UTF-8 string (empty if it can't be decoded).
+    private func decodeOutput(_ data: Data) -> String {
+        String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     public var isInstalled: Bool {
@@ -88,13 +99,8 @@ public class AerospaceAPI: AerospaceCommandExecutor {
     private func run(arguments: [String], captureOutput: Bool = true) -> String? {
         guard let path = aerospacePath else { return nil }
 
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: path)
-        task.arguments = arguments
-        task.standardError = FileHandle.nullDevice
-
         let pipe = captureOutput ? Pipe() : nil
-        task.standardOutput = captureOutput ? pipe : FileHandle.nullDevice
+        let task = makeProcess(executable: path, arguments: arguments, stdout: pipe)
 
         do {
             try task.run()
@@ -103,7 +109,6 @@ public class AerospaceAPI: AerospaceCommandExecutor {
             return nil
         }
 
-        // Wait with timeout instead of indefinite waitUntilExit()
         let completed = waitForProcess(task, timeout: processTimeout)
         if !completed {
             task.terminate()
@@ -118,7 +123,7 @@ public class AerospaceAPI: AerospaceCommandExecutor {
 
         guard let pipe = pipe else { return "" }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return decodeOutput(data)
     }
 
     /// Fires an aerospace command without waiting for completion.
@@ -127,11 +132,7 @@ public class AerospaceAPI: AerospaceCommandExecutor {
     private func fireAndForget(arguments: [String]) {
         guard let path = aerospacePath else { return }
 
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: path)
-        task.arguments = arguments
-        task.standardOutput = FileHandle.nullDevice
-        task.standardError = FileHandle.nullDevice
+        let task = makeProcess(executable: path, arguments: arguments, stdout: nil)
 
         do {
             try task.run()
