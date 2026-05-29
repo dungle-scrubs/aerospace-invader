@@ -4,6 +4,32 @@ import Foundation
 /// Registers global hotkeys via Carbon Event APIs and dispatches callbacks on the main thread.
 /// Uses debouncing to prevent rapid-fire navigation from concurrent key presses.
 public class HotkeyManager {
+    /// Identifies which navigation action a registered hotkey triggers, and owns
+    /// each action's id, log label, and which `Config` binding drives it.
+    private enum HotkeyAction: UInt32, CaseIterable {
+        case back = 1, forward = 2, expand = 3, toggle = 4
+
+        /// Human-readable role, used in the registration log line.
+        var label: String {
+            switch self {
+            case .back: return "back"
+            case .forward: return "forward"
+            case .expand: return "expand"
+            case .toggle: return "toggle"
+            }
+        }
+
+        /// The configured binding for this action.
+        func binding(in config: Config) -> HotkeyConfig {
+            switch self {
+            case .back: return config.back
+            case .forward: return config.forward
+            case .expand: return config.expand
+            case .toggle: return config.toggle
+            }
+        }
+    }
+
     /// Shared singleton for production use.
     public static let shared = HotkeyManager()
 
@@ -52,32 +78,35 @@ public class HotkeyManager {
             manager.lastDispatchTime = now
 
             DispatchQueue.main.async {
-                switch hotkeyID.id {
-                case 1: manager.onBack?()
-                case 2: manager.onForward?()
-                case 3: manager.onExpand?()
-                case 4: manager.onToggle?()
-                default: break
-                }
+                guard let action = HotkeyAction(rawValue: hotkeyID.id) else { return }
+                manager.dispatch(action)
             }
             return noErr
         }
 
         InstallEventHandler(GetApplicationEventTarget(), handler, 1, &eventType, nil, nil)
 
-        registerHotkey(config.back, id: 1)
-        registerHotkey(config.forward, id: 2)
-        registerHotkey(config.expand, id: 3)
-        registerHotkey(config.toggle, id: 4)
+        for action in HotkeyAction.allCases {
+            registerHotkey(action.binding(in: config), id: action.rawValue)
+        }
 
-        let backDesc = ConfigManager.hotkeyDescription(config.back)
-        let forwardDesc = ConfigManager.hotkeyDescription(config.forward)
-        let expandDesc = ConfigManager.hotkeyDescription(config.expand)
-        let toggleDesc = ConfigManager.hotkeyDescription(config.toggle)
-        fputs("Hotkeys registered: \(backDesc) (back), \(forwardDesc) (forward), \(expandDesc) (expand), \(toggleDesc) (toggle)\n", stderr)
+        let summary = HotkeyAction.allCases
+            .map { "\(ConfigManager.hotkeyDescription($0.binding(in: config))) (\($0.label))" }
+            .joined(separator: ", ")
+        fputs("Hotkeys registered: \(summary)\n", stderr)
 
         // Install signal handlers for cleanup on SIGTERM/SIGINT
         installSignalHandlers()
+    }
+
+    /// Invokes the callback bound to a hotkey action (read live, so reassignment takes effect).
+    private func dispatch(_ action: HotkeyAction) {
+        switch action {
+        case .back: onBack?()
+        case .forward: onForward?()
+        case .expand: onExpand?()
+        case .toggle: onToggle?()
+        }
     }
 
     /// Registers a single hotkey with the Carbon event system.
