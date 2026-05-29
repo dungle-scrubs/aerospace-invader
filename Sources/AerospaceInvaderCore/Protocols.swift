@@ -46,19 +46,15 @@ public protocol AerospaceCommandExecutor {
 /// Abstraction over workspace order file persistence.
 /// Production code uses `OrderManager`; tests can inject a mock.
 public protocol WorkspaceOrderProvider {
-    /// Load the saved workspace order from disk.
-    /// - Returns: Array of workspace names in saved order, or empty if no file.
-    func loadOrder() -> [String]
-
     /// Save a workspace order to disk.
     /// - Parameter order: Array of workspace names to persist.
     func saveOrder(_ order: [String])
 
-    /// Merge saved order with currently active workspaces.
-    /// Preserves custom ordering, removes closed workspaces, appends new ones.
+    /// Reconcile the saved order with the currently active workspaces, persist the result, and return it.
+    /// Preserves custom ordering, removes closed workspaces, appends new ones — then saves in one step.
     /// - Parameter current: The current list of non-empty workspaces.
-    /// - Returns: Merged workspace order.
-    func mergeWithCurrent(_ current: [String]) -> [String]
+    /// - Returns: The merged, now-persisted workspace order.
+    func reconcile(with current: [String]) -> [String]
 }
 
 // MARK: - Configuration

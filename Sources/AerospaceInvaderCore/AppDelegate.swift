@@ -159,8 +159,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showWorkspaceWindow(expanded: Bool, autoHide: Bool) {
         let current = api.getNonEmptyWorkspaces()
-        let ordered = orderProvider.mergeWithCurrent(current)
-        orderProvider.saveOrder(ordered)
+        let ordered = orderProvider.reconcile(with: current)
         let currentWs = api.getCurrentWorkspace()
 
         workspaceWindow = createWorkspaceWindow()

@@ -73,6 +73,12 @@ final class MockOrderProvider: WorkspaceOrderProvider {
     func mergeWithCurrent(_ current: [String]) -> [String] {
         OrderManager.merge(saved: savedOrder, current: current)
     }
+
+    func reconcile(with current: [String]) -> [String] {
+        let order = mergeWithCurrent(current)
+        saveOrder(order)
+        return order
+    }
 }
 
 // MARK: - Mock ConfigurationProvider

@@ -7,32 +7,22 @@ public class OrderManager: WorkspaceOrderProvider {
     public static let shared = OrderManager()
 
     private let queue = DispatchQueue(label: "com.aerospace-invader.order")
-    private let configDir = NSHomeDirectory() + "/.config/aerospace-invader"
-    private let orderFile: String
+    private let orderFile = ConfigStore.directory + "/order.json"
 
     private init() {
-        orderFile = configDir + "/order.json"
-        ensureConfigDir()
-    }
-
-    private func ensureConfigDir() {
-        do {
-            try FileManager.default.createDirectory(atPath: configDir, withIntermediateDirectories: true)
-        } catch {
-            fputs("OrderManager: failed to create config dir — \(error.localizedDescription)\n", stderr)
-        }
+        ConfigStore.ensureDirectory(context: "OrderManager")
     }
 
     /// Loads the saved workspace order from disk (thread-safe).
     /// - Returns: Array of workspace names, or empty if no file or parse error.
-    public func loadOrder() -> [String] {
+    private func loadOrder() -> [String] {
         queue.sync {
             do {
                 let data = try Data(contentsOf: URL(fileURLWithPath: orderFile))
                 return try JSONDecoder().decode([String].self, from: data)
             } catch {
                 // File-not-found is expected on first run — only log actual errors
-                if (error as NSError).domain != NSCocoaErrorDomain || (error as NSError).code != NSFileReadNoSuchFileError {
+                if !ConfigStore.isFileNotFound(error) {
                     fputs("OrderManager: failed to load order — \(error.localizedDescription)\n", stderr)
                 }
                 return []
@@ -53,13 +43,14 @@ public class OrderManager: WorkspaceOrderProvider {
         }
     }
 
-    /// Merges saved order with currently active workspaces.
-    /// Preserves custom ordering, removes closed workspaces, appends new ones.
+    /// Reconciles saved order with the currently active workspaces and persists the result.
+    /// Preserves custom ordering, removes closed workspaces, appends new ones, then saves.
     /// - Parameter current: The current list of non-empty workspaces from AeroSpace.
-    /// - Returns: Merged workspace order.
-    public func mergeWithCurrent(_ current: [String]) -> [String] {
-        let saved = loadOrder()
-        return OrderManager.merge(saved: saved, current: current)
+    /// - Returns: The merged, now-persisted workspace order.
+    public func reconcile(with current: [String]) -> [String] {
+        let order = OrderManager.merge(saved: loadOrder(), current: current)
+        saveOrder(order)
+        return order
     }
 
     /// Pure merge function — testable without file I/O.

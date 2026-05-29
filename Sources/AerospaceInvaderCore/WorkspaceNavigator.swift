@@ -72,8 +72,7 @@ public class WorkspaceNavigator {
     /// Refreshes the workspace cache from AeroSpace — must be called within `stateQueue`.
     private func _refreshCacheUnsafe() {
         let (workspaces, focused) = api.getWorkspacesWithFocus()
-        let order = orderProvider.mergeWithCurrent(workspaces)
-        orderProvider.saveOrder(order)
+        let order = orderProvider.reconcile(with: workspaces)
 
         if let newFocused = focused, newFocused != _cachedFocused, _cachedFocused != nil {
             _previousWorkspace = _cachedFocused
@@ -189,8 +188,7 @@ public class WorkspaceNavigator {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             guard let self = self else { return }
             let (workspaces, current) = self.api.getWorkspacesWithFocus()
-            let order = self.orderProvider.mergeWithCurrent(workspaces)
-            self.orderProvider.saveOrder(order)
+            let order = self.orderProvider.reconcile(with: workspaces)
 
             self.mutateState {
                 self._cachedOrder = order
@@ -216,8 +214,7 @@ public class WorkspaceNavigator {
     /// Core sync navigation — shared by `back()` and `forward()`.
     private func navigateSync(_ direction: Direction) -> (order: [String], current: String?) {
         let (nonEmpty, current) = api.getWorkspacesWithFocus()
-        let order = orderProvider.mergeWithCurrent(nonEmpty)
-        orderProvider.saveOrder(order)
+        let order = orderProvider.reconcile(with: nonEmpty)
 
         guard !order.isEmpty else { return ([], nil) }
 
