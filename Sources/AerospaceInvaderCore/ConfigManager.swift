@@ -46,8 +46,7 @@ public class ConfigManager: ConfigurationProvider {
     public static let shared = ConfigManager()
 
     private let queue = DispatchQueue(label: "com.aerospace-invader.config")
-    private let configDir = NSHomeDirectory() + "/.config/aerospace-invader"
-    private let configFile: String
+    private let configFile = ConfigStore.directory + "/config.json"
     private var _config: Config
 
     /// The current hotkey configuration (thread-safe read).
@@ -56,18 +55,9 @@ public class ConfigManager: ConfigurationProvider {
     }
 
     private init() {
-        configFile = configDir + "/config.json"
         _config = Config.default
-        ensureConfigDir()
+        ConfigStore.ensureDirectory(context: "ConfigManager")
         _config = ConfigManager.loadConfig(from: configFile) ?? Config.default
-    }
-
-    private func ensureConfigDir() {
-        do {
-            try FileManager.default.createDirectory(atPath: configDir, withIntermediateDirectories: true)
-        } catch {
-            fputs("ConfigManager: failed to create config dir — \(error.localizedDescription)\n", stderr)
-        }
     }
 
     /// Loads a `Config` from a file path.
@@ -78,7 +68,7 @@ public class ConfigManager: ConfigurationProvider {
             let data = try Data(contentsOf: URL(fileURLWithPath: path))
             return try JSONDecoder().decode(Config.self, from: data)
         } catch {
-            if (error as NSError).domain != NSCocoaErrorDomain || (error as NSError).code != NSFileReadNoSuchFileError {
+            if !ConfigStore.isFileNotFound(error) {
                 fputs("ConfigManager: failed to load config from \(path) — \(error.localizedDescription)\n", stderr)
             }
             return nil
@@ -116,17 +106,6 @@ public class ConfigManager: ConfigurationProvider {
         "up": kVK_UpArrow, "down": kVK_DownArrow
     ]
 
-    /// Maps modifier names (case-insensitive) to Carbon modifier masks.
-    public static let modifierMasks: [String: Int] = [
-        "option": optionKey,
-        "alt": optionKey,
-        "command": cmdKey,
-        "cmd": cmdKey,
-        "control": controlKey,
-        "ctrl": controlKey,
-        "shift": shiftKey
-    ]
-
     /// Converts a key name to its Carbon virtual key code.
     /// - Parameter key: Key name (case-insensitive).
     /// - Returns: Key code, or nil for unknown keys.
@@ -136,15 +115,10 @@ public class ConfigManager: ConfigurationProvider {
     }
 
     /// Combines modifier names into a single Carbon modifier mask.
-    /// - Parameter modifiers: Array of modifier names (case-insensitive).
-    /// - Returns: Combined modifier mask. Unknown modifiers are ignored.
+    /// - Parameter modifiers: Array of modifier names (case-insensitive). Unknown names are ignored.
+    /// - Returns: Combined modifier mask.
     public static func modifierMask(for modifiers: [String]) -> UInt32 {
-        var mask = 0
-        for mod in modifiers {
-            if let m = modifierMasks[mod.lowercased()] {
-                mask |= m
-            }
-        }
+        let mask = modifiers.reduce(0) { $0 | (Modifier(name: $1)?.mask ?? 0) }
         return UInt32(mask)
     }
 
@@ -152,17 +126,45 @@ public class ConfigManager: ConfigurationProvider {
     /// - Parameter config: The hotkey configuration.
     /// - Returns: String with modifier symbols followed by the key.
     public static func hotkeyDescription(_ config: HotkeyConfig) -> String {
-        var parts: [String] = []
-        for mod in config.modifiers {
-            switch mod.lowercased() {
-            case "option", "alt": parts.append("⌥")
-            case "command", "cmd": parts.append("⌘")
-            case "control", "ctrl": parts.append("⌃")
-            case "shift": parts.append("⇧")
-            default: break
-            }
+        let symbols = config.modifiers.compactMap { Modifier(name: $0)?.symbol }
+        return (symbols + [config.key.uppercased()]).joined()
+    }
+}
+
+/// A keyboard modifier, owning the single source of truth for its name aliases,
+/// Carbon mask, and display glyph.
+enum Modifier {
+    case option, command, control, shift
+
+    /// Resolves a modifier name (case-insensitive, including aliases like "alt"/"cmd"/"ctrl").
+    /// - Returns: The matching modifier, or nil if the name is unknown.
+    init?(name: String) {
+        switch name.lowercased() {
+        case "option", "alt": self = .option
+        case "command", "cmd": self = .command
+        case "control", "ctrl": self = .control
+        case "shift": self = .shift
+        default: return nil
         }
-        parts.append(config.key.uppercased())
-        return parts.joined()
+    }
+
+    /// Carbon modifier mask.
+    var mask: Int {
+        switch self {
+        case .option: return optionKey
+        case .command: return cmdKey
+        case .control: return controlKey
+        case .shift: return shiftKey
+        }
+    }
+
+    /// Display glyph for the modifier.
+    var symbol: String {
+        switch self {
+        case .option: return "⌥"
+        case .command: return "⌘"
+        case .control: return "⌃"
+        case .shift: return "⇧"
+        }
     }
 }
