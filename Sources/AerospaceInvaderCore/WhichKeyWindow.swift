@@ -3,7 +3,7 @@ import Cocoa
 
 /// A popup overlay that shows the keybindings for an AeroSpace mode (e.g. service, resize).
 /// Auto-dismisses when the user exits the mode or presses Escape/clicks outside.
-public class WhichKeyWindow: NSPanel {
+public final class WhichKeyWindow: NSPanel {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var modeCheckTimer: Timer?
@@ -37,14 +37,17 @@ public class WhichKeyWindow: NSPanel {
 
     /// Displays the which-key window for the given AeroSpace mode.
     /// - Parameter mode: The mode name (e.g. "service", "resize").
-    public func show(mode: String) {
+    /// - Returns: True if the window was shown; false if bindings couldn't be fetched, in which
+    ///   case no window is created and the caller must decide how to terminate.
+    @discardableResult
+    public func show(mode: String) -> Bool {
         guard let bindings = api.getBindings(mode: mode) else {
             fputs("Failed to get bindings for mode: \(mode)\n", stderr)
-            return
+            return false
         }
 
         targetMode = mode
-        let grouped = groupBindings(bindings)
+        let grouped = BindingFormatter.group(bindings)
         rebuildUI(groups: grouped)
         makeKeyAndOrderFront(nil)
 
@@ -54,6 +57,7 @@ public class WhichKeyWindow: NSPanel {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             self?.startModeCheckTimer()
         }
+        return true
     }
 
     // MARK: - Mode Polling
@@ -74,16 +78,15 @@ public class WhichKeyWindow: NSPanel {
     // MARK: - Event Tap
 
     private func setupEventTap() {
+        // Intentionally NOT tapping .keyDown: a session-wide keyboard tap would observe every
+        // keystroke system-wide (a keylogger-shaped surface) just to catch Escape. Escape is
+        // handled by this panel's keyDown override and by the mode-exit poll instead; the tap
+        // watches only mouse-down, to dismiss on a click outside the overlay.
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
             guard let userInfo = userInfo else { return Unmanaged.passUnretained(event) }
             let window = Unmanaged<WhichKeyWindow>.fromOpaque(userInfo).takeUnretainedValue()
 
-            if type == .keyDown {
-                let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-                if keyCode == Int64(kVK_Escape) {
-                    DispatchQueue.main.async { window.fadeOut() }
-                }
-            } else if type == .leftMouseDown || type == .rightMouseDown {
+            if type == .leftMouseDown || type == .rightMouseDown {
                 DispatchQueue.main.async { window.fadeOut() }
             }
 
@@ -92,8 +95,7 @@ public class WhichKeyWindow: NSPanel {
 
         let selfPointer = Unmanaged.passUnretained(self).toOpaque()
 
-        let eventMask: CGEventMask = (1 << CGEventType.keyDown.rawValue) |
-            (1 << CGEventType.leftMouseDown.rawValue) |
+        let eventMask: CGEventMask = (1 << CGEventType.leftMouseDown.rawValue) |
             (1 << CGEventType.rightMouseDown.rawValue)
 
         guard let tap = CGEvent.tapCreate(
@@ -141,101 +143,9 @@ public class WhichKeyWindow: NSPanel {
         })
     }
 
-    // MARK: - Binding Categorization
-
-    /// Modifier replacements used by `formatKey` — ordered longest-first to avoid partial matches.
-    private static let keyReplacements: [(from: String, to: String)] = [
-        ("shift-ctrl-alt-", "⌃⌥⇧"),
-        ("ctrl-alt-", "⌃⌥"),
-        ("alt-shift-", "⌥⇧"),
-        ("alt-", "⌥"),
-        ("shift-", "⇧"),
-        ("ctrl-", "⌃"),
-        ("cmd-", "⌘"),
-        ("backspace", "⌫"),
-        ("esc", "Esc"),
-        ("semicolon", ";"),
-        ("comma", ","),
-        ("slash", "/")
-    ]
-
-    /// Command simplifications used by `formatCmd`.
-    private static let cmdReplacements: [(from: String, to: String)] = [
-        ("; mode main", ""),
-        ("flatten-workspace-tree", "flatten"),
-        ("close-all-windows-but-current", "close others"),
-        ("layout floating tiling", "toggle float"),
-        ("reload-config", "reload"),
-        ("join-with ", "join "),
-        ("enable toggle", "toggle enable")
-    ]
-
-    /// Groups bindings into categories for display.
-    /// - Parameter bindings: Raw key → command mappings from AeroSpace.
-    /// - Returns: Named groups with sorted items, in display order.
-    private func groupBindings(_ bindings: [String: String]) -> [(name: String, items: [(key: String, cmd: String)])] {
-        var groups: [String: [(key: String, cmd: String)]] = [
-            "Movement": [], "Layout": [], "Actions": [], "Exit": []
-        ]
-
-        for (key, cmd) in bindings {
-            let cat = categorize(key: key, cmd: cmd)
-            groups[cat]?.append((key: key, cmd: cmd))
-        }
-
-        for cat in groups.keys {
-            groups[cat]?.sort { $0.key < $1.key }
-        }
-
-        return ["Movement", "Layout", "Actions", "Exit"].compactMap { name in
-            guard let items = groups[name], !items.isEmpty else { return nil }
-            return (name: name, items: items)
-        }
-    }
-
-    /// Categorizes a binding into Movement, Layout, Exit, or Actions.
-    /// - Parameters:
-    ///   - key: The key string (e.g. "h", "alt-shift-h").
-    ///   - cmd: The command string (e.g. "focus left", "layout h_accordion").
-    /// - Returns: Category name.
-    private func categorize(key: String, cmd: String) -> String {
-        if cmd.hasPrefix("move ") || cmd.hasPrefix("join-with ") || cmd.hasPrefix("focus ") {
-            return "Movement"
-        }
-        if cmd.hasPrefix("layout ") || cmd.contains("fullscreen") {
-            return "Layout"
-        }
-        if cmd.contains("mode main") && (key == "esc" || cmd.contains("reload")) {
-            return "Exit"
-        }
-        return "Actions"
-    }
-
-    /// Converts modifier/key strings to readable symbols.
-    /// - Parameter key: Raw key string from AeroSpace config.
-    /// - Returns: Human-readable key representation.
-    private func formatKey(_ key: String) -> String {
-        var result = key
-        for replacement in Self.keyReplacements {
-            result = result.replacingOccurrences(of: replacement.from, with: replacement.to)
-        }
-        return result
-    }
-
-    /// Simplifies command strings for display.
-    /// - Parameter cmd: Raw command string from AeroSpace config.
-    /// - Returns: Shortened, human-readable command.
-    private func formatCmd(_ cmd: String) -> String {
-        var result = cmd
-        for replacement in Self.cmdReplacements {
-            result = result.replacingOccurrences(of: replacement.from, with: replacement.to)
-        }
-        return result
-    }
-
     // MARK: - UI
 
-    private func rebuildUI(groups: [(name: String, items: [(key: String, cmd: String)])]) {
+    private func rebuildUI(groups: [BindingFormatter.Group]) {
         let font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         let lineHeight: CGFloat = 20
         let headerHeight: CGFloat = 28
@@ -283,7 +193,7 @@ public class WhichKeyWindow: NSPanel {
         var yPos = height - padding - titleHeight - 8
 
         for group in groups {
-            let header = NSTextField(labelWithString: group.name)
+            let header = NSTextField(labelWithString: group.category.rawValue)
             header.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
             header.textColor = Style.inactiveColor
             yPos -= headerHeight
@@ -293,13 +203,13 @@ public class WhichKeyWindow: NSPanel {
             for item in group.items {
                 yPos -= lineHeight
 
-                let keyLabel = NSTextField(labelWithString: formatKey(item.key))
+                let keyLabel = NSTextField(labelWithString: BindingFormatter.formatKey(item.key))
                 keyLabel.font = font
                 keyLabel.textColor = Style.keyColor
                 keyLabel.frame = NSRect(x: padding + 8, y: yPos, width: 80, height: lineHeight)
                 contentView?.addSubview(keyLabel)
 
-                let cmdLabel = NSTextField(labelWithString: formatCmd(item.cmd))
+                let cmdLabel = NSTextField(labelWithString: BindingFormatter.formatCmd(item.cmd))
                 cmdLabel.font = font
                 cmdLabel.textColor = Style.secondaryTextColor
                 cmdLabel.lineBreakMode = .byTruncatingTail

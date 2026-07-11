@@ -3,7 +3,7 @@ import Foundation
 
 /// Registers global hotkeys via Carbon Event APIs and dispatches callbacks on the main thread.
 /// Uses debouncing to prevent rapid-fire navigation from concurrent key presses.
-public class HotkeyManager {
+public final class HotkeyManager {
     /// Identifies which navigation action a registered hotkey triggers, and owns
     /// each action's id, log label, and which `Config` binding drives it.
     private enum HotkeyAction: UInt32, CaseIterable {
@@ -35,6 +35,9 @@ public class HotkeyManager {
 
     private var hotkeyRefs: [EventHotKeyRef?] = []
 
+    /// Retained dispatch sources for SIGTERM/SIGINT cleanup handlers.
+    private var signalSources: [DispatchSourceSignal] = []
+
     /// Callback for the "back" hotkey.
     public var onBack: (() -> Void)?
     /// Callback for the "forward" hotkey.
@@ -63,13 +66,17 @@ public class HotkeyManager {
 
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
 
-        let handler: EventHandlerUPP = { _, event, _ -> OSStatus in
+        let handler: EventHandlerUPP = { _, event, userData -> OSStatus in
+            // Recover the registering instance from userData rather than reaching for the
+            // singleton, so an injected (non-shared) manager receives its own callbacks.
+            guard let userData = userData else { return noErr }
+            let manager = Unmanaged<HotkeyManager>.fromOpaque(userData).takeUnretainedValue()
+
             var hotkeyID = EventHotKeyID()
             GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
                               nil, MemoryLayout<EventHotKeyID>.size, nil, &hotkeyID)
 
             let now = ProcessInfo.processInfo.systemUptime
-            let manager = HotkeyManager.shared
 
             // Debounce: skip if fired too recently
             guard now - manager.lastDispatchTime >= manager.debounceInterval else {
@@ -84,7 +91,8 @@ public class HotkeyManager {
             return noErr
         }
 
-        InstallEventHandler(GetApplicationEventTarget(), handler, 1, &eventType, nil, nil)
+        let selfPointer = Unmanaged.passUnretained(self).toOpaque()
+        InstallEventHandler(GetApplicationEventTarget(), handler, 1, &eventType, selfPointer, nil)
 
         for action in HotkeyAction.allCases {
             registerHotkey(action.binding(in: config), id: action.rawValue)
@@ -136,14 +144,19 @@ public class HotkeyManager {
     }
 
     /// Installs SIGTERM and SIGINT handlers to clean up hotkeys on forced termination.
+    /// Uses `DispatchSource` signal handling so cleanup runs on the main queue in a normal
+    /// context — not inside an async-signal handler, where `UnregisterEventHotKey`, array
+    /// mutation, and `exit()` are all unsafe to call.
     private func installSignalHandlers() {
-        signal(SIGTERM) { _ in
-            HotkeyManager.shared.unregister()
-            exit(0)
-        }
-        signal(SIGINT) { _ in
-            HotkeyManager.shared.unregister()
-            exit(0)
+        for sig in [SIGTERM, SIGINT] {
+            signal(sig, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+            source.setEventHandler { [weak self] in
+                self?.unregister()
+                exit(0)
+            }
+            source.resume()
+            signalSources.append(source)
         }
     }
 }

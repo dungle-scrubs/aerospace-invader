@@ -4,6 +4,14 @@ import Cocoa
 let version = "0.2.1" // x-release-please-version
 
 func printHelp() {
+    // Derive the displayed hotkeys and paths from the same sources the daemon uses, so help
+    // text can't drift from the actual default bindings or config locations.
+    let defaults = Config.default
+    let back = ConfigManager.hotkeyDescription(defaults.back)
+    let forward = ConfigManager.hotkeyDescription(defaults.forward)
+    let toggle = ConfigManager.hotkeyDescription(defaults.toggle)
+    let expand = ConfigManager.hotkeyDescription(defaults.expand)
+
     print("""
         aerospace-invader \(version)
         A workspace navigator and OSD for AeroSpace window manager
@@ -22,15 +30,15 @@ func printHelp() {
             -h, --help          Show this help message
             -v, --version       Show version
 
-        HOTKEYS (daemon mode):
-            ⌥O                  Previous workspace
-            ⌥I                  Next workspace
-            ⌥P                  Toggle between current and previous workspace
-            ⌥.                  Expand compact bar to grid view
+        HOTKEYS (daemon mode, defaults):
+            \(back)                  Previous workspace
+            \(forward)                  Next workspace
+            \(toggle)                  Toggle between current and previous workspace
+            \(expand)                  Expand compact bar to grid view
 
         CONFIG:
-            ~/.config/aerospace-invader/config.json    Hotkey configuration
-            ~/.config/aerospace-invader/order.json     Saved workspace order
+            \(ConfigStore.configFile)    Hotkey configuration
+            \(ConfigStore.orderFile)     Saved workspace order
         """)
 }
 

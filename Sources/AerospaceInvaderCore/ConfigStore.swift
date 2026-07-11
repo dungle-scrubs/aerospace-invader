@@ -1,9 +1,15 @@
 import Foundation
 
 /// Shared on-disk location and helpers for the app's config and state files.
-enum ConfigStore {
+public enum ConfigStore {
     /// Directory holding all aerospace-invader config and state files.
-    static let directory = NSHomeDirectory() + "/.config/aerospace-invader"
+    public static let directory = NSHomeDirectory() + "/.config/aerospace-invader"
+
+    /// Absolute path to the hotkey configuration file.
+    public static let configFile = directory + "/config.json"
+
+    /// Absolute path to the persisted workspace-order file.
+    public static let orderFile = directory + "/order.json"
 
     /// Creates the config directory if needed, logging failures tagged with `context`.
     static func ensureDirectory(context: String) {

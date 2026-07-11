@@ -2,15 +2,22 @@ import Foundation
 
 /// Persists the user's custom workspace ordering to `~/.config/aerospace-invader/order.json`.
 /// Thread-safe via a serial dispatch queue.
-public class OrderManager: WorkspaceOrderProvider {
+public final class OrderManager: WorkspaceOrderProvider {
     /// Shared singleton for production use.
     public static let shared = OrderManager()
 
     private let queue = DispatchQueue(label: "com.aerospace-invader.order")
-    private let orderFile = ConfigStore.directory + "/order.json"
+    private let orderFile: String
 
     private init() {
+        orderFile = ConfigStore.orderFile
         ConfigStore.ensureDirectory(context: "OrderManager")
+    }
+
+    /// Creates an order manager backed by a specific file (for testing).
+    /// - Parameter orderFile: Absolute path to the order JSON file.
+    init(orderFile: String) {
+        self.orderFile = orderFile
     }
 
     /// Loads the saved workspace order from disk (thread-safe).

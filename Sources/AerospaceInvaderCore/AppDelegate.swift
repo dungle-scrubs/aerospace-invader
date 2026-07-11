@@ -7,7 +7,7 @@ public enum AppMode: String {
 
 /// Application delegate — routes commands and wires dependencies.
 /// Responsibilities are limited to lifecycle, mode routing, and dependency wiring.
-public class AppDelegate: NSObject, NSApplicationDelegate {
+public final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The workspace OSD window (created lazily on first use).
     public var workspaceWindow: WorkspaceWindow?
     /// The which-key popup (created per invocation).
@@ -155,26 +155,44 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.workspaceWindow?.fadeOut()
             }
         }
+        window.onDismiss = { [weak self] in
+            // A hidden window never closes itself, so a one-shot (non-daemon) invocation would
+            // otherwise leave a resident process behind. Terminate once the OSD is dismissed.
+            guard let self = self, !self.isDaemon else { return }
+            NSApp.terminate(nil)
+        }
         return window
     }
 
     private func showWorkspaceWindow(expanded: Bool, autoHide: Bool) {
-        let current = api.getNonEmptyWorkspaces()
-        let ordered = orderProvider.reconcile(with: current)
-        let currentWs = api.getCurrentWorkspace()
+        // The workspace query blocks on the aerospace CLI; run it off the main thread and
+        // build/show the window back on main. A single query yields both list and focus,
+        // avoiding a redundant second subprocess.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let (current, currentWs) = self.api.getWorkspacesWithFocus()
+            let ordered = self.orderProvider.reconcile(with: current)
 
-        workspaceWindow = createWorkspaceWindow()
-
-        if expanded {
-            workspaceWindow?.showExpanded(workspaces: ordered, current: currentWs)
-        } else {
-            workspaceWindow?.show(workspaces: ordered, current: currentWs, autoHide: autoHide)
+            DispatchQueue.main.async {
+                let window = self.createWorkspaceWindow()
+                self.workspaceWindow = window
+                if expanded {
+                    window.showExpanded(workspaces: ordered, current: currentWs)
+                } else {
+                    window.show(workspaces: ordered, current: currentWs, autoHide: autoHide)
+                }
+            }
         }
     }
 
     private func showWhichKey(mode: String) {
-        whichKeyWindow = WhichKeyWindow(api: api)
-        whichKeyWindow?.show(mode: mode)
+        let window = WhichKeyWindow(api: api)
+        whichKeyWindow = window
+        if !window.show(mode: mode) {
+            // Bindings couldn't be fetched (e.g. unknown mode). This is a one-shot command with
+            // no window to close, so nothing would ever terminate the process — exit now.
+            NSApp.terminate(nil)
+        }
     }
 
     // MARK: - Error Handling

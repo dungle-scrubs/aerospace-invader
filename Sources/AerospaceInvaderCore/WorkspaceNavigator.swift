@@ -3,7 +3,7 @@ import Foundation
 /// Handles workspace navigation with cache-first response for instant feedback.
 /// Keeps an ordered list of workspaces in sync with AeroSpace and `OrderManager`.
 /// All state mutations are serialized on an internal queue for thread safety.
-public class WorkspaceNavigator {
+public final class WorkspaceNavigator {
     /// Shared singleton using default dependencies.
     public static let shared = WorkspaceNavigator()
 
@@ -38,53 +38,43 @@ public class WorkspaceNavigator {
         stateQueue.sync { block() }
     }
 
-    /// Get current index of a workspace in an ordered list.
-    /// - Parameters:
-    ///   - order: The workspace order to search.
-    ///   - current: The workspace name to find.
-    /// - Returns: Index of the workspace, or 0 if not found.
-    private func getCurrentIndex(in order: [String], current: String?) -> Int {
-        guard let ws = current, let idx = order.firstIndex(of: ws) else { return 0 }
-        return idx
-    }
-
-    // MARK: - Manual Switch Detection
-
-    /// Detects if the user manually switched workspaces via AeroSpace keybinds.
-    /// Must be called BEFORE navigation to keep history accurate.
-    private func detectManualSwitch() {
-        let actualCurrent = api.getCurrentWorkspace()
-
-        mutateState {
-            guard let actual = actualCurrent,
-                  actual != _cachedFocused,
-                  !_cachedOrder.isEmpty else { return }
-
-            if _cachedFocused != nil {
-                _previousWorkspace = _cachedFocused
-            }
-            _cachedFocused = actual
+    /// Computes the navigation target for a direction from an ordered list and current focus.
+    /// From an unknown or absent focus, forward starts at the first workspace and backward at
+    /// the last — rather than treating "not found" as index 0, which would skip the first.
+    /// - Returns: The target workspace name, or nil if the order is empty.
+    private func computeTarget(in order: [String], focused: String?, direction: Direction) -> String? {
+        guard !order.isEmpty else { return nil }
+        guard let ws = focused, let idx = order.firstIndex(of: ws) else {
+            return direction == .forward ? order.first : order.last
         }
+        return order[direction.nextIndex(from: idx, count: order.count)]
     }
 
     // MARK: - Cache
 
-    /// Refreshes the workspace cache from AeroSpace — must be called within `stateQueue`.
-    private func _refreshCacheUnsafe() {
+    /// Refreshes the workspace cache from AeroSpace. Safe to call from any thread; the blocking
+    /// CLI query and file reconciliation run OUTSIDE the state lock, which is taken only to
+    /// publish the results — so a concurrent cached read never blocks on external I/O.
+    public func refreshCache() {
         let (workspaces, focused) = api.getWorkspacesWithFocus()
         let order = orderProvider.reconcile(with: workspaces)
 
-        if let newFocused = focused, newFocused != _cachedFocused, _cachedFocused != nil {
-            _previousWorkspace = _cachedFocused
+        mutateState {
+            // Adopt a focus change made outside this app (e.g. AeroSpace's own keybinds), but
+            // ignore a reading equal to the workspace we just navigated away from: that is the
+            // signature of a fire-and-forget switch that hasn't landed yet, and adopting it would
+            // revert the optimistic focus during rapid navigation. A nil reading (transient CLI
+            // failure) is left alone rather than wiping the known focus.
+            if let newFocused = focused,
+               newFocused != _cachedFocused,
+               newFocused != _previousWorkspace {
+                if _cachedFocused != nil {
+                    _previousWorkspace = _cachedFocused
+                }
+                _cachedFocused = newFocused
+            }
+            _cachedOrder = order
         }
-
-        _cachedFocused = focused
-        _cachedOrder = order
-    }
-
-    /// Thread-safe cache refresh.
-    public func refreshCache() {
-        mutateState { _refreshCacheUnsafe() }
     }
 
     // MARK: - Navigation
@@ -111,58 +101,46 @@ public class WorkspaceNavigator {
     }
 
     /// Core navigation logic shared by `back()` and `forward()`.
-    /// Uses cache for instant response, refreshes in background for next time.
+    /// Serves the response from cache for instant feedback WITHOUT launching a process on the
+    /// calling thread, then reconciles state in the background for the next navigation.
     /// - Parameters:
     ///   - direction: Which direction to navigate.
     ///   - completion: Called with the ordered workspaces and the new current workspace.
     private func navigate(_ direction: Direction, completion: @escaping ([String], String?) -> Void) {
-        detectManualSwitch()
-
-        let (shouldNavigate, order, target, cacheWasEmpty) = withState { () -> (Bool, [String], String?, Bool) in
-            let wasEmpty = _cachedOrder.isEmpty
-
-            guard !_cachedOrder.isEmpty else {
-                return (false, [], nil, wasEmpty)
+        let (order, target) = withState { () -> ([String], String?) in
+            guard let target = computeTarget(in: _cachedOrder, focused: _cachedFocused, direction: direction) else {
+                return (_cachedOrder, nil)
             }
-
-            let idx = getCurrentIndex(in: _cachedOrder, current: _cachedFocused)
-            let newIdx = direction.nextIndex(from: idx, count: _cachedOrder.count)
-            guard newIdx < _cachedOrder.count else { return (false, _cachedOrder, nil, wasEmpty) }
-            let target = _cachedOrder[newIdx]
             _previousWorkspace = _cachedFocused
             _cachedFocused = target
-
-            return (true, _cachedOrder, target, wasEmpty)
+            return (_cachedOrder, target)
         }
 
-        if shouldNavigate, let target = target {
+        if let target = target {
+            // Cache hit: respond instantly, then refresh in the background after a short settle
+            // so the re-read reflects our just-issued switch instead of racing it.
             api.switchToWorkspace(target)
             completion(order, target)
-        }
-
-        // Refresh cache in background for next navigation
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-
-            if cacheWasEmpty {
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.refreshCache()
+            }
+        } else {
+            // Cold start (empty cache): populate from AeroSpace off the main thread, then navigate.
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self = self else { return }
+                self.refreshCache()
                 let (order, target) = self.withState { () -> ([String], String?) in
-                    self._refreshCacheUnsafe()
-                    guard !self._cachedOrder.isEmpty else { return ([], nil) }
-
-                    let idx = self.getCurrentIndex(in: self._cachedOrder, current: self._cachedFocused)
-                    let newIdx = direction.nextIndex(from: idx, count: self._cachedOrder.count)
-                    guard newIdx < self._cachedOrder.count else { return (self._cachedOrder, nil) }
-                    let target = self._cachedOrder[newIdx]
+                    guard let target = self.computeTarget(in: self._cachedOrder, focused: self._cachedFocused, direction: direction) else {
+                        return (self._cachedOrder, nil)
+                    }
+                    self._previousWorkspace = self._cachedFocused
                     self._cachedFocused = target
                     return (self._cachedOrder, target)
                 }
-
                 if let target = target {
                     self.api.switchToWorkspace(target)
                     DispatchQueue.main.async { completion(order, target) }
                 }
-            } else {
-                self.refreshCache()
             }
         }
     }
@@ -184,8 +162,9 @@ public class WorkspaceNavigator {
     public func toggle(completion: @escaping ([String], String?) -> Void) {
         api.workspaceBackAndForth()
 
-        // Brief delay to let AeroSpace complete the switch, then update UI
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+        // Brief delay to let AeroSpace complete the switch, then read fresh state on a
+        // background queue (the CLI query blocks) and deliver the UI update on main.
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.05) { [weak self] in
             guard let self = self else { return }
             let (workspaces, current) = self.api.getWorkspacesWithFocus()
             let order = self.orderProvider.reconcile(with: workspaces)
@@ -195,7 +174,7 @@ public class WorkspaceNavigator {
                 self._cachedFocused = current
             }
 
-            completion(order, current)
+            DispatchQueue.main.async { completion(order, current) }
         }
     }
 
@@ -216,12 +195,9 @@ public class WorkspaceNavigator {
         let (nonEmpty, current) = api.getWorkspacesWithFocus()
         let order = orderProvider.reconcile(with: nonEmpty)
 
-        guard !order.isEmpty else { return ([], nil) }
-
-        let idx = getCurrentIndex(in: order, current: current)
-        let newIdx = direction.nextIndex(from: idx, count: order.count)
-        guard newIdx < order.count else { return (order, nil) }
-        let target = order[newIdx]
+        guard let target = computeTarget(in: order, focused: current, direction: direction) else {
+            return (order, nil)
+        }
 
         api.switchToWorkspace(target)
         return (order, target)

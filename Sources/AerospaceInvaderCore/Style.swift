@@ -29,4 +29,8 @@ public struct Style {
     public static let tileInactiveColor = NSColor(white: 0.25, alpha: 1)
     /// Faint green fill behind the active workspace pill in compact view.
     public static let activeHighlightColor = NSColor(red: 0, green: 1, blue: 0, alpha: 0.15)
+    /// Neutral border around the OSD window chrome.
+    public static let windowBorderColor = NSColor(white: 0.25, alpha: 1)
+    /// Red fill for the expanded-view close button.
+    public static let closeButtonColor = NSColor(red: 1, green: 0.3, blue: 0.3, alpha: 1)
 }

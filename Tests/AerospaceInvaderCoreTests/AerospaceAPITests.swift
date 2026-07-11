@@ -11,7 +11,7 @@ struct AerospaceAPITests {
     func notInstalledDescription() {
         let error = AerospaceError.notInstalled
         #expect(error.description.contains("not installed"))
-        #expect(error.description.contains("brew"))
+        #expect(error.description.contains("github.com/nikitabobko/AeroSpace"))
     }
 
     @Test("notRunning error has descriptive message")
@@ -90,5 +90,49 @@ struct AerospaceAPITests {
 
         #expect(api.getNonEmptyWorkspaces().isEmpty)
         #expect(api.getCurrentWorkspace() == nil)
+    }
+
+    // MARK: - Workspace output parsing
+
+    @Test("parse empty output yields no workspaces")
+    func parseEmpty() {
+        let result = AerospaceAPI.parseWorkspaceOutput("")
+        #expect(result.workspaces.isEmpty)
+        #expect(result.focused == nil)
+    }
+
+    @Test("parse identifies the focused workspace")
+    func parseFocused() {
+        let result = AerospaceAPI.parseWorkspaceOutput("A|false\nB|true\nC|false")
+        #expect(result.workspaces == ["A", "B", "C"])
+        #expect(result.focused == "B")
+    }
+
+    @Test("parse with no focused line yields nil focus")
+    func parseNoFocus() {
+        let result = AerospaceAPI.parseWorkspaceOutput("A|false\nB|false")
+        #expect(result.workspaces == ["A", "B"])
+        #expect(result.focused == nil)
+    }
+
+    @Test("parse with multiple focused lines takes the last")
+    func parseMultipleFocused() {
+        let result = AerospaceAPI.parseWorkspaceOutput("A|true\nB|true")
+        #expect(result.workspaces == ["A", "B"])
+        #expect(result.focused == "B")
+    }
+
+    @Test("parse drops malformed lines")
+    func parseMalformed() {
+        let result = AerospaceAPI.parseWorkspaceOutput("A|true\nB\n\nC|false")
+        #expect(result.workspaces == ["A", "C"])
+        #expect(result.focused == "A")
+    }
+
+    @Test("parse tolerates CRLF and surrounding whitespace")
+    func parseWhitespace() {
+        let result = AerospaceAPI.parseWorkspaceOutput("A|false\r\n B | true \r\nC|false")
+        #expect(result.workspaces == ["A", "B", "C"])
+        #expect(result.focused == "B")
     }
 }

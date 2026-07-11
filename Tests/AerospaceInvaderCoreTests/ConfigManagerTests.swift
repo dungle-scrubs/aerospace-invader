@@ -37,9 +37,11 @@ struct ConfigManagerTests {
         #expect(config == nil)
     }
 
-    @Test("load config from partial JSON")
+    @Test("partial JSON fills omitted bindings from defaults")
     func loadConfigFromPartialJSON() {
-        // Missing required fields (forward, expand, toggle)
+        // Only `back` is specified, and it omits `modifiers`. Resilient decoding should keep the
+        // specified binding and fall back to defaults for everything else, rather than discarding
+        // the whole config — so adding a field or writing a partial config never resets bindings.
         let jsonString = """
         {
             "back": { "key": "h" }
@@ -49,7 +51,25 @@ struct ConfigManagerTests {
 
         let config = ConfigManager.loadConfig(from: json)
 
-        #expect(config == nil)
+        #expect(config != nil)
+        #expect(config?.back == HotkeyConfig(key: "h", modifiers: ["option"]))
+        #expect(config?.forward == Config.default.forward)
+        #expect(config?.expand == Config.default.expand)
+        #expect(config?.toggle == Config.default.toggle)
+    }
+
+    @Test("invalid binding shape still fails")
+    func loadConfigRejectsInvalidBinding() {
+        // A present-but-malformed binding (missing the required `key`) is a real error, not a
+        // forward-compat gap, so it must not silently succeed.
+        let jsonString = """
+        {
+            "back": { "modifiers": ["option"] }
+        }
+        """
+        let json = Data(jsonString.utf8)
+
+        #expect(ConfigManager.loadConfig(from: json) == nil)
     }
 
     @Test("load config with all modifiers")
