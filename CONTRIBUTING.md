@@ -38,7 +38,8 @@
 
 ## Testing
 
-Tests require full Xcode (not just Command Line Tools):
+The tests use the [Swift Testing](https://developer.apple.com/documentation/testing) framework,
+which requires Xcode 16+ (Swift 6 toolchain) — Command Line Tools alone are not sufficient:
 
 ```bash
 # Check current selection

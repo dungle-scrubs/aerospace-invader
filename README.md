@@ -18,16 +18,25 @@ A workspace navigator and on-screen display for [AeroSpace](https://github.com/n
 
 - macOS 13.0+ (Apple Silicon or Intel)
 - [AeroSpace](https://github.com/nikitabobko/AeroSpace) window manager
-- Swift 5.9+ (Xcode Command Line Tools or full Xcode)
+- To build: Swift 5.9+ (Xcode Command Line Tools or full Xcode)
+- To run the test suite: Xcode 16+ / Swift 6 toolchain (the tests use the Swift Testing framework)
 
 ## Installation
 
-### Homebrew (recommended)
+### Prebuilt binary (recommended)
+
+Download the tarball for your architecture from the [latest release](https://github.com/dungle-scrubs/aerospace-invader/releases/latest):
 
 ```bash
-brew install dungle-scrubs/aerospace-invader/aerospace-invader
-brew services start aerospace-invader
+# Apple Silicon (M1/M2/M3)
+curl -L https://github.com/dungle-scrubs/aerospace-invader/releases/latest/download/aerospace-invader-darwin-arm64.tar.gz | tar xz
+# Intel
+curl -L https://github.com/dungle-scrubs/aerospace-invader/releases/latest/download/aerospace-invader-darwin-x86_64.tar.gz | tar xz
+
+mv aerospace-invader /usr/local/bin/
 ```
+
+Each release lists per-architecture SHA256 checksums to verify the download.
 
 ### From Source
 
@@ -44,6 +53,8 @@ make install  # Installs to /usr/local/bin
 swift build -c release
 cp .build/release/aerospace-invader /usr/local/bin/
 ```
+
+Run the daemon at login with a LaunchAgent (see [below](#launchagent-start-at-login)).
 
 ## Usage
 
@@ -75,8 +86,10 @@ To show the which-key display when entering an AeroSpace mode, add this to your 
 
 ```toml
 [mode.main.binding]
-alt-shift-semicolon = ['mode service', 'exec-and-forget /opt/homebrew/bin/aerospace-invader whichkey service']
+alt-shift-semicolon = ['mode service', 'exec-and-forget /usr/local/bin/aerospace-invader whichkey service']
 ```
+
+Use the path where you installed the binary (`which aerospace-invader`).
 
 The which-key window automatically closes when AeroSpace exits the mode (i.e., when any binding is executed).
 
@@ -147,7 +160,8 @@ make run      # Build and run daemon
 
 ### Testing
 
-Tests require full Xcode (not just Command Line Tools):
+The tests use the [Swift Testing](https://developer.apple.com/documentation/testing) framework, which
+ships with Xcode 16+ (Swift 6 toolchain). Command Line Tools alone are not sufficient:
 
 ```bash
 # Check current selection
