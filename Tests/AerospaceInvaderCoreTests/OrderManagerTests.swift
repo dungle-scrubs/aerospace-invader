@@ -107,6 +107,50 @@ struct OrderManagerTests {
         #expect(Set(result).count == result.count)
     }
 
+    @Test("dedupes duplicates within current")
+    func mergeDedupesCurrent() {
+        let result = OrderManager.merge(saved: [], current: ["A", "B", "A", "C", "B"])
+        #expect(result == ["A", "B", "C"])
+    }
+
+    // MARK: - File persistence (reconcile round-trips through disk)
+
+    @Test("reconcile persists order and reloads it on the next call")
+    func reconcilePersistsToDisk() {
+        let path = NSTemporaryDirectory() + "aerospace-order-\(UUID().uuidString).json"
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let manager = OrderManager(orderFile: path)
+
+        // First reconcile writes the order to disk (async on a serial queue).
+        let first = manager.reconcile(with: ["A", "B", "C"])
+        #expect(first == ["A", "B", "C"])
+
+        // The next reconcile's load runs after the prior write on the same serial queue, so it
+        // must observe the persisted order — appending D while preserving the saved arrangement.
+        let second = manager.reconcile(with: ["A", "B", "C", "D"])
+        #expect(second == ["A", "B", "C", "D"])
+
+        // A workspace that no longer exists is dropped from the persisted order.
+        let third = manager.reconcile(with: ["C", "B", "A"])
+        #expect(third == ["A", "B", "C"])
+    }
+
+    @Test("reconcile writes valid JSON a fresh manager can read")
+    func reconcileWritesReadableFile() {
+        let path = NSTemporaryDirectory() + "aerospace-order-\(UUID().uuidString).json"
+        defer { try? FileManager.default.removeItem(atPath: path) }
+
+        let writer = OrderManager(orderFile: path)
+        // Two reconciles on the same instance: the second's synchronous load acts as a barrier
+        // guaranteeing the first write has flushed before we inspect the file.
+        _ = writer.reconcile(with: ["X", "Y"])
+        _ = writer.reconcile(with: ["X", "Y"])
+
+        let data = try? Data(contentsOf: URL(fileURLWithPath: path))
+        let decoded = data.flatMap { try? JSONDecoder().decode([String].self, from: $0) }
+        #expect(decoded == ["X", "Y"])
+    }
+
     // MARK: - MockOrderProvider integration
 
     @Test("mock order provider mergeWithCurrent uses merge logic")

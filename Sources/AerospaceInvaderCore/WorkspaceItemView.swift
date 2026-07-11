@@ -2,7 +2,7 @@ import Cocoa
 
 /// A single workspace item rendered as a compact pill or expanded tile.
 /// Handles click and drag interactions; delegates actions via closures.
-public class WorkspaceItemView: NSView {
+public final class WorkspaceItemView: NSView {
     /// The workspace name this view represents.
     public let workspace: String
 

@@ -84,6 +84,25 @@ struct WorkspaceNavigatorTests {
         #expect(api.switchedWorkspaces.isEmpty)
     }
 
+    @Test("cold start with a populated system navigates on the async path")
+    func coldStartNavigates() async {
+        let api = MockAerospaceAPI()
+        api.workspacesWithFocus = (["A", "B", "C"], "B")
+        let order = MockOrderProvider()
+        order.savedOrder = ["A", "B", "C"]
+        let navigator = WorkspaceNavigator(api: api, orderProvider: order)
+        navigator.resetForTesting() // empty cache → exercises the background populate-then-navigate branch
+
+        let current = await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
+            navigator.forward { _, current in
+                continuation.resume(returning: current)
+            }
+        }
+
+        #expect(current == "C")
+        #expect(api.switchedWorkspaces.contains("C"))
+    }
+
     // MARK: - Forward navigation
 
     @Test("forward navigates to next workspace")
@@ -207,6 +226,42 @@ struct WorkspaceNavigatorTests {
         }
 
         let (_, _, previous) = navigator.getStateForTesting()
+        #expect(previous == "B")
+    }
+
+    @Test("refreshCache adopts an externally-changed focus and records the previous")
+    func refreshDetectsExternalSwitch() {
+        let api = MockAerospaceAPI()
+        // AeroSpace reports focus on C (e.g. the user switched via AeroSpace's own keybind)...
+        api.workspacesWithFocus = (["A", "B", "C"], "C")
+        let order = MockOrderProvider()
+        order.savedOrder = ["A", "B", "C"]
+        let navigator = WorkspaceNavigator(api: api, orderProvider: order)
+        // ...while our cache still believes focus is on A.
+        navigator.setStateForTesting(order: ["A", "B", "C"], focused: "A", previous: nil)
+
+        navigator.refreshCache()
+
+        let (_, focused, previous) = navigator.getStateForTesting()
+        #expect(focused == "C")
+        #expect(previous == "A")
+    }
+
+    @Test("refreshCache ignores a stale read of the workspace just navigated away from")
+    func refreshIgnoresStaleSwitchRead() {
+        let api = MockAerospaceAPI()
+        // The switch to C hasn't landed, so AeroSpace still reports focus on B (where we came from).
+        api.workspacesWithFocus = (["A", "B", "C"], "B")
+        let order = MockOrderProvider()
+        order.savedOrder = ["A", "B", "C"]
+        let navigator = WorkspaceNavigator(api: api, orderProvider: order)
+        // Optimistic post-navigation state: focus on C, having just left B.
+        navigator.setStateForTesting(order: ["A", "B", "C"], focused: "C", previous: "B")
+
+        navigator.refreshCache()
+
+        let (_, focused, previous) = navigator.getStateForTesting()
+        #expect(focused == "C") // optimistic focus preserved, not reverted to the stale B
         #expect(previous == "B")
     }
 

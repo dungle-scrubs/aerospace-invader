@@ -3,7 +3,7 @@ import Cocoa
 
 /// The main workspace OSD — displays non-empty workspaces as a compact pill bar
 /// or an expanded grid with drag-to-reorder support.
-public class WorkspaceWindow: NSPanel {
+public final class WorkspaceWindow: NSPanel {
     /// Display mode for the window.
     public enum Mode { case compact, expanded }
 
@@ -20,6 +20,9 @@ public class WorkspaceWindow: NSPanel {
     public var onOrderChanged: (([String]) -> Void)?
     /// Called when the window collapses from expanded back to compact.
     public var onCollapse: (() -> Void)?
+    /// Called after the window finishes fading out. One-shot (non-daemon) invocations use this
+    /// to terminate the process, which otherwise lingers because hiding a window never closes it.
+    public var onDismiss: (() -> Void)?
 
     private var itemViews: [WorkspaceItemView] = []
     private var backgroundView: NSView
@@ -183,6 +186,7 @@ public class WorkspaceWindow: NSPanel {
             for item in self.itemViews {
                 item.isExpanded = false
             }
+            self.onDismiss?()
         })
     }
 
@@ -220,7 +224,7 @@ public class WorkspaceWindow: NSPanel {
         backgroundView.wantsLayer = true
         backgroundView.layer?.backgroundColor = Style.bgColor.cgColor
         backgroundView.layer?.cornerRadius = 8
-        backgroundView.layer?.borderColor = NSColor(white: 0.25, alpha: 1).cgColor
+        backgroundView.layer?.borderColor = Style.windowBorderColor.cgColor
         backgroundView.layer?.borderWidth = 1
 
         contentView = backgroundView
@@ -230,7 +234,7 @@ public class WorkspaceWindow: NSPanel {
         btn.bezelStyle = .circular
         btn.isBordered = false
         btn.wantsLayer = true
-        btn.layer?.backgroundColor = NSColor(red: 1, green: 0.3, blue: 0.3, alpha: 1).cgColor
+        btn.layer?.backgroundColor = Style.closeButtonColor.cgColor
         btn.layer?.cornerRadius = 8
         btn.title = ""
         btn.target = self
@@ -312,6 +316,17 @@ public class WorkspaceWindow: NSPanel {
         }
     }
 
+    /// Grid geometry for the current workspace count in expanded mode.
+    private var expandedGrid: GridLayout {
+        GridLayout(
+            itemCount: workspaces.count,
+            itemSize: expandedItemSize,
+            spacing: expandedSpacing,
+            padding: expandedPadding,
+            headerHeight: expandedHeaderHeight
+        )
+    }
+
     private func layoutExpanded(animated: Bool) {
         guard let screen = NSScreen.main, !workspaces.isEmpty else {
             fputs("WorkspaceWindow: cannot layout expanded — no screen or empty workspaces\n", stderr)
@@ -319,11 +334,9 @@ public class WorkspaceWindow: NSPanel {
         }
         let visibleFrame = screen.visibleFrame
 
-        let cols = min(workspaces.count, 5)
-        let rows = (workspaces.count + cols - 1) / cols
-
-        let windowWidth = CGFloat(cols) * (expandedItemSize + expandedSpacing) - expandedSpacing + expandedPadding * 2
-        let windowHeight = CGFloat(rows) * (expandedItemSize + expandedSpacing) - expandedSpacing + expandedPadding * 2 + expandedHeaderHeight
+        let contentSize = expandedGrid.contentSize
+        let windowWidth = contentSize.width
+        let windowHeight = contentSize.height
 
         let windowX = visibleFrame.midX - windowWidth / 2
         let windowY = visibleFrame.midY - windowHeight / 2
@@ -342,34 +355,17 @@ public class WorkspaceWindow: NSPanel {
             self.closeButton?.isHidden = false
 
             for item in itemViews {
-                item.animator().frame = expandedFrameForIndex(item.index, windowHeight: windowHeight, headerHeight: expandedHeaderHeight)
+                item.animator().frame = expandedFrameForIndex(item.index, windowHeight: windowHeight)
             }
         }
     }
 
-    private func expandedFrameForIndex(_ index: Int, windowHeight: CGFloat, headerHeight: CGFloat = 0) -> NSRect {
-        let cols = min(workspaces.count, 5)
-        let col = index % cols
-        let row = index / cols
-
-        let x = expandedPadding + CGFloat(col) * (expandedItemSize + expandedSpacing)
-        let y = windowHeight - expandedPadding - headerHeight - CGFloat(row + 1) * (expandedItemSize + expandedSpacing) + expandedSpacing
-
-        return NSRect(x: x, y: y, width: expandedItemSize, height: expandedItemSize)
+    private func expandedFrameForIndex(_ index: Int, windowHeight: CGFloat) -> NSRect {
+        expandedGrid.frame(forIndex: index, windowHeight: windowHeight)
     }
 
     private func indexForPoint(_ point: NSPoint) -> Int {
-        let cols = min(workspaces.count, 5)
-        let windowHeight = backgroundView.bounds.height
-
-        let col = Int((point.x - expandedPadding) / (expandedItemSize + expandedSpacing))
-        let row = Int((windowHeight - expandedPadding - expandedHeaderHeight - point.y) / (expandedItemSize + expandedSpacing))
-
-        let clampedCol = max(0, min(col, cols - 1))
-        let clampedRow = max(0, row)
-
-        let index = clampedRow * cols + clampedCol
-        return max(0, min(index, workspaces.count - 1))
+        expandedGrid.index(forPoint: point, windowHeight: backgroundView.bounds.height)
     }
 
     // MARK: - Drag Reorder
@@ -396,7 +392,7 @@ public class WorkspaceWindow: NSPanel {
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.15
             for view in itemViews where view !== dragging {
-                view.animator().frame = expandedFrameForIndex(view.index, windowHeight: backgroundView.bounds.height, headerHeight: expandedHeaderHeight)
+                view.animator().frame = expandedFrameForIndex(view.index, windowHeight: backgroundView.bounds.height)
             }
         }
 
@@ -408,7 +404,7 @@ public class WorkspaceWindow: NSPanel {
 
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.15
-            dragging.animator().frame = expandedFrameForIndex(dragging.index, windowHeight: backgroundView.bounds.height, headerHeight: expandedHeaderHeight)
+            dragging.animator().frame = expandedFrameForIndex(dragging.index, windowHeight: backgroundView.bounds.height)
         }
 
         draggingView = nil

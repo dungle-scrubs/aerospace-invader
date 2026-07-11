@@ -14,6 +14,14 @@ public struct HotkeyConfig: Codable, Equatable {
         self.key = key
         self.modifiers = modifiers
     }
+
+    /// Decodes a binding, defaulting `modifiers` to `["option"]` when omitted so a config that
+    /// specifies only a key still parses.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        key = try container.decode(String.self, forKey: .key)
+        modifiers = try container.decodeIfPresent([String].self, forKey: .modifiers) ?? ["option"]
+    }
 }
 
 /// Top-level configuration with all four hotkey bindings.
@@ -37,16 +45,27 @@ public struct Config: Codable, Equatable {
         self.expand = expand
         self.toggle = toggle
     }
+
+    /// Decodes a config, filling any omitted binding from `Config.default`. This keeps a
+    /// forward-compatible or partial config file from resetting every unrelated binding.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = Config.default
+        back = try container.decodeIfPresent(HotkeyConfig.self, forKey: .back) ?? fallback.back
+        forward = try container.decodeIfPresent(HotkeyConfig.self, forKey: .forward) ?? fallback.forward
+        expand = try container.decodeIfPresent(HotkeyConfig.self, forKey: .expand) ?? fallback.expand
+        toggle = try container.decodeIfPresent(HotkeyConfig.self, forKey: .toggle) ?? fallback.toggle
+    }
 }
 
 /// Manages loading and persisting hotkey configuration from `~/.config/aerospace-invader/config.json`.
 /// Thread-safe via a serial dispatch queue.
-public class ConfigManager: ConfigurationProvider {
+public final class ConfigManager: ConfigurationProvider {
     /// Shared singleton for production use.
     public static let shared = ConfigManager()
 
     private let queue = DispatchQueue(label: "com.aerospace-invader.config")
-    private let configFile = ConfigStore.directory + "/config.json"
+    private let configFile = ConfigStore.configFile
     private var _config: Config
 
     /// The current hotkey configuration (thread-safe read).

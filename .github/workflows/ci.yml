@@ -1,6 +1,11 @@
 name: CI
 on: [push, pull_request]
 
+# Least privilege: CI only needs to read the checkout. The secrets-scan job below grants
+# itself nothing extra — gitleaks scans the working tree with read-only access.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: macos-latest
