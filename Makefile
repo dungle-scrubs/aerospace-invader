@@ -24,7 +24,7 @@ test:
 	swift test
 
 lint:
-	swiftlint Sources Tests
+	swiftlint lint --strict
 
 format:
 	swift-format -i -r Sources Tests
