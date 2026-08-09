@@ -23,11 +23,8 @@ public final class WhichKeyWindow: NSPanel {
             defer: false
         )
 
-        isFloatingPanel = true
+        OverlayShell.configure(self)
         level = .popUpMenu
-        backgroundColor = .clear
-        isOpaque = false
-        hasShadow = true
     }
 
     deinit {
@@ -130,17 +127,15 @@ public final class WhichKeyWindow: NSPanel {
         runLoopSource = nil
     }
 
-    /// Fades the window out, cleans up resources, and terminates the app.
+    /// Fades the window out, cleans up resources, and terminates the app. Delegates
+    /// animation to `OverlayShell` so both overlays share one fade path.
     public func fadeOut() {
         modeCheckTimer?.invalidate()
         modeCheckTimer = nil
         cleanupEventTap()
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.15
-            self.animator().alphaValue = 0
-        }, completionHandler: {
+        OverlayShell.fadeOut(self, duration: 0.15) {
             NSApp.terminate(nil)
-        })
+        }
     }
 
     // MARK: - UI
@@ -169,10 +164,10 @@ public final class WhichKeyWindow: NSPanel {
 
         let bg = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
         bg.wantsLayer = true
-        bg.layer?.backgroundColor = Style.bgColor.cgColor
-        bg.layer?.cornerRadius = 10
-        bg.layer?.borderColor = Style.borderColor.cgColor
-        bg.layer?.borderWidth = 2
+        bg.layer?.backgroundColor = Style.Overlay.background.cgColor
+        bg.layer?.cornerRadius = Style.Overlay.whichKeyCornerRadius
+        bg.layer?.borderColor = Style.Overlay.accentBorder.cgColor
+        bg.layer?.borderWidth = Style.Overlay.whichKeyBorderWidth
         contentView = bg
 
         // Title

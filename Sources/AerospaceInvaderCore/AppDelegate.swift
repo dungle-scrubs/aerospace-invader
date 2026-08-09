@@ -5,13 +5,21 @@ public enum AppMode: String {
     case daemon, tabs, expand, whichkey, hide
 }
 
-/// Application delegate — routes commands and wires dependencies.
-/// Responsibilities are limited to lifecycle, mode routing, and dependency wiring.
+/// Application delegate — now a thin adapter that translates `AppMode` into `UserIntent`
+/// and delegates to `Session`. Session is the deep module that owns window lifecycle,
+/// hotkey dispatch, and the stitching between Navigator and the OSD. The delegate keeps
+/// only lifecycle (ensureEnabled, error alert) and the NSApplicationDelegate conformance.
 public final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// The workspace OSD window (created lazily on first use).
-    public var workspaceWindow: WorkspaceWindow?
-    /// The which-key popup (created per invocation).
-    public var whichKeyWindow: WhichKeyWindow?
+    /// The workspace OSD window (proxied from Session for backward compatibility).
+    public var workspaceWindow: WorkspaceWindow? {
+        get { session.workspaceWindow }
+        set { session.workspaceWindow = newValue }
+    }
+    /// The which-key popup (proxied from Session).
+    public var whichKeyWindow: WhichKeyWindow? {
+        get { session.whichKeyWindow }
+        set { session.whichKeyWindow = newValue }
+    }
 
     /// The command mode to execute.
     public var mode: AppMode = .daemon
@@ -20,11 +28,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Whether the app is running as a persistent daemon.
     public var isDaemon: Bool { mode == .daemon }
 
-    // Dependencies — defaulting to shared singletons
     private let api: AerospaceCommandExecutor
-    private let navigator: WorkspaceNavigator
-    private let orderProvider: WorkspaceOrderProvider
     private let hotkeyManager: HotkeyManager
+    let session: Session
 
     /// Creates an AppDelegate with injected dependencies.
     /// - Parameters:
@@ -32,15 +38,30 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     ///   - navigator: Workspace navigator (default: shared singleton).
     ///   - orderProvider: Order persistence (default: shared singleton).
     ///   - hotkeyManager: Hotkey manager (default: shared singleton).
-    public init(api: AerospaceCommandExecutor = AerospaceAPI.shared,
-                navigator: WorkspaceNavigator = .shared,
-                orderProvider: WorkspaceOrderProvider = OrderManager.shared,
-                hotkeyManager: HotkeyManager = .shared) {
+    ///   - windowFactory: Factory for OSD windows (for testing).
+    ///   - whichKeyFactory: Factory for which-key windows (for testing).
+    public init(
+        api: AerospaceCommandExecutor = AerospaceAPI.shared,
+        navigator: WorkspaceNavigator = .shared,
+        orderProvider: WorkspaceOrderProvider = OrderManager.shared,
+        hotkeyManager: HotkeyManager = .shared,
+        windowFactory: @escaping () -> WorkspaceWindow = { WorkspaceWindow() },
+        whichKeyFactory: @escaping (AerospaceCommandExecutor) -> WhichKeyWindow = { WhichKeyWindow(api: $0) }
+    ) {
         self.api = api
-        self.navigator = navigator
-        self.orderProvider = orderProvider
         self.hotkeyManager = hotkeyManager
+        self.session = Session(
+            api: api,
+            navigator: navigator,
+            orderProvider: orderProvider,
+            hotkeyManager: hotkeyManager,
+            isDaemon: { false }, // placeholder — will be replaced after super.init so it can capture self
+            windowFactory: windowFactory,
+            whichKeyFactory: whichKeyFactory
+        )
         super.init()
+        // Rebind isDaemon to reflect the live delegate state, not a captured constant.
+        self.session.replaceIsDaemonProvider { [weak self] in self?.isDaemon ?? false }
     }
 
     // MARK: - App Lifecycle
@@ -56,12 +77,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        // Single seam: AppMode → UserIntent → Session.execute
         switch mode {
-        case .daemon:   startDaemon()
-        case .tabs:     showWorkspaceWindow(expanded: false, autoHide: true)
-        case .expand:   showWorkspaceWindow(expanded: true, autoHide: false)
-        case .whichkey: showWhichKey(mode: modeArg ?? "service")
-        case .hide:     NSApp.terminate(nil)
+        case .daemon:   session.execute(.runDaemon)
+        case .tabs:     session.execute(.showTabs)
+        case .expand:   session.execute(.showExpanded)
+        case .whichkey: session.execute(.whichKey(mode: modeArg ?? "service"))
+        case .hide:     session.execute(.hide)
         }
     }
 
@@ -71,128 +93,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationWillTerminate(_ notification: Notification) {
         hotkeyManager.unregister()
-    }
-
-    // MARK: - Daemon Mode
-
-    private func startDaemon() {
-        fputs("Starting aerospace-invader daemon...\n", stderr)
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.navigator.refreshCache()
-        }
-
-        hotkeyManager.onBack = { [weak self] in self?.handleBack() }
-        hotkeyManager.onForward = { [weak self] in self?.handleForward() }
-        hotkeyManager.onExpand = { [weak self] in self?.handleExpand() }
-        hotkeyManager.onToggle = { [weak self] in self?.handleToggle() }
-        hotkeyManager.register()
-
-        fputs("Daemon running.\n", stderr)
-    }
-
-    // MARK: - Hotkey Handlers
-
-    private func handleExpand() {
-        if let window = workspaceWindow, window.isVisible {
-            if window.mode == .compact {
-                window.expand()
-            } else {
-                window.fadeOut()
-            }
-        } else {
-            showWorkspaceWindow(expanded: true, autoHide: false)
-        }
-    }
-
-    private func handleToggle() {
-        navigator.toggle { [weak self] order, current in
-            guard !order.isEmpty else { return }
-            self?.showOrUpdateWorkspaceWindow(workspaces: order, current: current)
-        }
-    }
-
-    private func handleBack() {
-        navigator.back { [weak self] order, current in
-            guard !order.isEmpty else { return }
-            self?.showOrUpdateWorkspaceWindow(workspaces: order, current: current)
-        }
-    }
-
-    private func handleForward() {
-        navigator.forward { [weak self] order, current in
-            guard !order.isEmpty else { return }
-            self?.showOrUpdateWorkspaceWindow(workspaces: order, current: current)
-        }
-    }
-
-    // MARK: - Window Management
-
-    private func showOrUpdateWorkspaceWindow(workspaces: [String], current: String?) {
-        if workspaceWindow == nil {
-            workspaceWindow = createWorkspaceWindow()
-        }
-        workspaceWindow?.show(workspaces: workspaces, current: current, autoHide: true)
-    }
-
-    private func createWorkspaceWindow() -> WorkspaceWindow {
-        let window = WorkspaceWindow()
-        window.onSelectWorkspace = { [weak self] ws in
-            guard let self = self else { return }
-            self.api.switchToWorkspace(ws)
-            if self.isDaemon {
-                self.workspaceWindow?.fadeOut()
-            } else {
-                NSApp.terminate(nil)
-            }
-        }
-        window.onOrderChanged = { [weak self] newOrder in
-            self?.orderProvider.saveOrder(newOrder)
-        }
-        window.onCollapse = { [weak self] in
-            guard self?.isDaemon == true else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                self?.workspaceWindow?.fadeOut()
-            }
-        }
-        window.onDismiss = { [weak self] in
-            // A hidden window never closes itself, so a one-shot (non-daemon) invocation would
-            // otherwise leave a resident process behind. Terminate once the OSD is dismissed.
-            guard let self = self, !self.isDaemon else { return }
-            NSApp.terminate(nil)
-        }
-        return window
-    }
-
-    private func showWorkspaceWindow(expanded: Bool, autoHide: Bool) {
-        // The workspace query blocks on the aerospace CLI; run it off the main thread and
-        // build/show the window back on main. A single query yields both list and focus,
-        // avoiding a redundant second subprocess.
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            let (current, currentWs) = self.api.getWorkspacesWithFocus()
-            let ordered = self.orderProvider.reconcile(with: current)
-
-            DispatchQueue.main.async {
-                let window = self.createWorkspaceWindow()
-                self.workspaceWindow = window
-                if expanded {
-                    window.showExpanded(workspaces: ordered, current: currentWs)
-                } else {
-                    window.show(workspaces: ordered, current: currentWs, autoHide: autoHide)
-                }
-            }
-        }
-    }
-
-    private func showWhichKey(mode: String) {
-        let window = WhichKeyWindow(api: api)
-        whichKeyWindow = window
-        if !window.show(mode: mode) {
-            // Bindings couldn't be fetched (e.g. unknown mode). This is a one-shot command with
-            // no window to close, so nothing would ever terminate the process — exit now.
-            NSApp.terminate(nil)
-        }
     }
 
     // MARK: - Error Handling
@@ -226,5 +126,20 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         NSApp.terminate(nil)
+    }
+}
+
+// MARK: - Session isDaemon rebinding
+
+private extension Session {
+    /// Replace the isDaemon provider after initialization. AppDelegate needs this because
+    /// the provider must capture `self.isDaemon` which isn't available until after `super.init`.
+    func replaceIsDaemonProvider(_ provider: @escaping () -> Bool) {
+        // Session stores the closure in a private let; use reflection via a dedicated update
+        // method rather than exposing the closure. We add this as a private extension to avoid
+        // making the property internal.
+        // Swift cannot reassign a let via extension, so we expose a dedicated internal setter.
+        // Fall back to using a mutable boxed reference.
+        _setIsDaemonProvider(provider)
     }
 }
