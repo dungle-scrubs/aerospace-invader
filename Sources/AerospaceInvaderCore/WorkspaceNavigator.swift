@@ -22,8 +22,10 @@ public final class WorkspaceNavigator {
     /// - Parameters:
     ///   - api: The aerospace command executor (default: `AerospaceAPI.shared`).
     ///   - orderProvider: The workspace order provider (default: `OrderManager.shared`).
-    public init(api: AerospaceCommandExecutor = AerospaceAPI.shared,
-                orderProvider: WorkspaceOrderProvider = OrderManager.shared) {
+    public init(
+        api: AerospaceCommandExecutor = AerospaceAPI.shared,
+        orderProvider: WorkspaceOrderProvider = OrderManager.shared
+    ) {
         self.api = api
         self.orderProvider = orderProvider
     }
@@ -66,8 +68,8 @@ public final class WorkspaceNavigator {
             // revert the optimistic focus during rapid navigation. A nil reading (transient CLI
             // failure) is left alone rather than wiping the known focus.
             if let newFocused = focused,
-               newFocused != _cachedFocused,
-               newFocused != _previousWorkspace {
+                newFocused != _cachedFocused,
+                newFocused != _previousWorkspace {
                 if _cachedFocused != nil {
                     _previousWorkspace = _cachedFocused
                 }
@@ -78,6 +80,21 @@ public final class WorkspaceNavigator {
     }
 
     // MARK: - Navigation
+
+    /// Public direction exposed for `resolve` seam. Mirrors private `Direction` but is the
+    /// deep module's intent vocabulary — one enum, not two method names.
+    public enum NavigationDirection {
+        case backward
+        case forward
+    }
+
+    /// Pure intent resolved from current state — the one value behind the seam.
+    /// Locality: circular target, order, and previous tracking live here.
+    public struct NavigationIntent: Equatable {
+        public let order: [String]
+        public let target: String
+        public let previous: String?
+    }
 
     /// Direction for workspace cycling.
     private enum Direction {
@@ -100,48 +117,54 @@ public final class WorkspaceNavigator {
         }
     }
 
-    /// Core navigation logic shared by `back()` and `forward()`.
-    /// Serves the response from cache for instant feedback WITHOUT launching a process on the
-    /// calling thread, then reconciles state in the background for the next navigation.
-    /// - Parameters:
-    ///   - direction: Which direction to navigate.
-    ///   - completion: Called with the ordered workspaces and the new current workspace.
-    private func navigate(_ direction: Direction, completion: @escaping ([String], String?) -> Void) {
-        let (order, target) = withState { () -> ([String], String?) in
+    /// Single decision point — the only place that computes target and mutates optimistic state.
+    /// All async navigation (`back/forward`) flows through here.
+    /// - Parameter direction: Which way to cycle.
+    /// - Returns: Intent with order/target/previous, or nil when empty.
+    public func resolve(_ direction: NavigationDirection) -> NavigationIntent? {
+        resolveIntent(for: direction == .backward ? .backward : .forward)
+    }
+
+    private func resolveIntent(for direction: Direction) -> NavigationIntent? {
+        withState { () -> NavigationIntent? in
             guard let target = computeTarget(in: _cachedOrder, focused: _cachedFocused, direction: direction) else {
-                return (_cachedOrder, nil)
+                return nil
             }
+            let intent = NavigationIntent(order: _cachedOrder, target: target, previous: _cachedFocused)
             _previousWorkspace = _cachedFocused
             _cachedFocused = target
-            return (_cachedOrder, target)
+            return intent
         }
+    }
 
-        if let target = target {
-            // Cache hit: respond instantly, then refresh in the background after a short settle
-            // so the re-read reflects our just-issued switch instead of racing it.
-            api.switchToWorkspace(target)
-            completion(order, target)
+    /// Shared publish helper — one place for fresh-state publication (toggle + settle refresh).
+    private func publishFreshState(order: [String], current: String?) {
+        mutateState {
+            _cachedOrder = order
+            _cachedFocused = current
+        }
+    }
+
+    /// Core navigation — now delegates decision to `resolveIntent` so cache mutation
+    /// lives in one place. Timing (instant + settle) stays here.
+    private func navigate(_ direction: Direction, completion: @escaping ([String], String?) -> Void) {
+        if let intent = resolveIntent(for: direction) {
+            // Cache hit: respond instantly, then refresh in background after settle
+            api.switchToWorkspace(intent.target)
+            completion(intent.order, intent.target)
             DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.1) { [weak self] in
                 self?.refreshCache()
             }
-        } else {
-            // Cold start (empty cache): populate from AeroSpace off the main thread, then navigate.
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                guard let self = self else { return }
-                self.refreshCache()
-                let (order, target) = self.withState { () -> ([String], String?) in
-                    guard let target = self.computeTarget(in: self._cachedOrder, focused: self._cachedFocused, direction: direction) else {
-                        return (self._cachedOrder, nil)
-                    }
-                    self._previousWorkspace = self._cachedFocused
-                    self._cachedFocused = target
-                    return (self._cachedOrder, target)
-                }
-                if let target = target {
-                    self.api.switchToWorkspace(target)
-                    DispatchQueue.main.async { completion(order, target) }
-                }
-            }
+            return
+        }
+
+        // Cold start (empty cache): populate then resolve once more — same seam.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            self.refreshCache()
+            guard let intent = self.resolveIntent(for: direction) else { return }
+            self.api.switchToWorkspace(intent.target)
+            DispatchQueue.main.async { completion(intent.order, intent.target) }
         }
     }
 
@@ -162,18 +185,11 @@ public final class WorkspaceNavigator {
     public func toggle(completion: @escaping ([String], String?) -> Void) {
         api.workspaceBackAndForth()
 
-        // Brief delay to let AeroSpace complete the switch, then read fresh state on a
-        // background queue (the CLI query blocks) and deliver the UI update on main.
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.05) { [weak self] in
             guard let self = self else { return }
             let (workspaces, current) = self.api.getWorkspacesWithFocus()
             let order = self.orderProvider.reconcile(with: workspaces)
-
-            self.mutateState {
-                self._cachedOrder = order
-                self._cachedFocused = current
-            }
-
+            self.publishFreshState(order: order, current: current)
             DispatchQueue.main.async { completion(order, current) }
         }
     }

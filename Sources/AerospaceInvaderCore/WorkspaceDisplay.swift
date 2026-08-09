@@ -156,8 +156,9 @@ public final class WorkspaceDisplay {
     @discardableResult
     public func reorder(from sourceIndex: Int, to targetIndex: Int) -> [String]? {
         guard sourceIndex != targetIndex,
-              sourceIndex >= 0, sourceIndex < state.workspaces.count,
-              targetIndex >= 0, targetIndex < state.workspaces.count else {
+            sourceIndex >= 0, sourceIndex < state.workspaces.count,
+            targetIndex >= 0, targetIndex < state.workspaces.count
+        else {
             return nil
         }
         let item = state.workspaces.remove(at: sourceIndex)

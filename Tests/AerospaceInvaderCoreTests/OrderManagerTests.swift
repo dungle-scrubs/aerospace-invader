@@ -1,6 +1,7 @@
-@testable import AerospaceInvaderCore
 import Foundation
 import Testing
+
+@testable import AerospaceInvaderCore
 
 @Suite("OrderManager")
 struct OrderManagerTests {

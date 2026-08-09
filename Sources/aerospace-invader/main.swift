@@ -1,7 +1,7 @@
 import AerospaceInvaderCore
 import Cocoa
 
-let version = "0.2.1" // x-release-please-version
+let version = "0.2.1"  // x-release-please-version
 
 func printHelp() {
     // Derive the displayed hotkeys and paths from the same sources the daemon uses, so help
@@ -12,7 +12,8 @@ func printHelp() {
     let toggle = ConfigManager.hotkeyDescription(defaults.toggle)
     let expand = ConfigManager.hotkeyDescription(defaults.expand)
 
-    print("""
+    print(
+        """
         aerospace-invader \(version)
         A workspace navigator and OSD for AeroSpace window manager
 

@@ -66,14 +66,16 @@ public enum OverlayShell {
 
     /// Fade a window out and invoke completion on the main queue.
     public static func fadeOut(_ window: NSWindow, duration: TimeInterval = 0.2, completion: @escaping () -> Void) {
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = duration
-            window.animator().alphaValue = 0
-        }, completionHandler: {
-            window.orderOut(nil)
-            window.alphaValue = 1
-            completion()
-        })
+        NSAnimationContext.runAnimationGroup(
+            { ctx in
+                ctx.duration = duration
+                window.animator().alphaValue = 0
+            },
+            completionHandler: {
+                window.orderOut(nil)
+                window.alphaValue = 1
+                completion()
+            })
     }
 
     /// Fade a window in from transparent.
@@ -107,10 +109,10 @@ public enum OverlayShell {
 
 // MARK: - Style grouping for overlays
 
-public extension Style {
+extension Style {
     /// Overlay-specific style group — one place for panel chrome constants so a design
     /// tweak (corner radius, border width) touches one module instead of two windows.
-    enum Overlay {
+    public enum Overlay {
         public static var background: NSColor { Style.bgColor }
         public static var border: NSColor { Style.windowBorderColor }
         public static var accentBorder: NSColor { Style.borderColor }

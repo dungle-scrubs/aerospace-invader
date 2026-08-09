@@ -42,24 +42,26 @@ public final class WorkspaceWindow: NSPanel {
     private var itemViews: [WorkspaceItemView] = []
     private var backgroundView: NSView
     private var closeButton: NSButton?
-    private var hideTimer: Timer?
-    private var draggingView: WorkspaceItemView?
     private var clickOutsideMonitor: Any?
 
-    // Layout is now centralized in WorkspaceDisplay.LayoutConfig; these remain as
-    // convenience accessors so existing layout code need not change shape.
+    /// Deep collaborators — the window is a thin compositor.
+    private let autoHide: AutoHidePolicy
+    private let drag: DragCoordinator
+    private var draggingView: WorkspaceItemView?
+
+    // Layout is centralized in WorkspaceDisplay.LayoutConfig + WindowLayout.
     private var compactHeight: CGFloat { display.config.compactHeight }
-    private var compactPadding: CGFloat { display.config.compactPadding }
     private var compactSpacing: CGFloat { display.config.compactSpacing }
-    private var expandedItemSize: CGFloat { display.config.expandedItemSize }
-    private var expandedSpacing: CGFloat { display.config.expandedSpacing }
-    private var expandedPadding: CGFloat { display.config.expandedPadding }
-    private var expandedHeaderHeight: CGFloat { display.config.expandedHeaderHeight }
 
     /// Creates a window backed by the given display. When no display is provided a
     /// default one is created so existing call sites remain unbroken.
-    public init(display: WorkspaceDisplay = WorkspaceDisplay()) {
+    /// - Parameters:
+    ///   - display: The display model to render.
+    ///   - autoHide: Injected hide policy (for tests). Defaults to 1.5s.
+    public init(display: WorkspaceDisplay = WorkspaceDisplay(), autoHide: AutoHidePolicy = AutoHidePolicy()) {
         self.display = display
+        self.autoHide = autoHide
+        self.drag = DragCoordinator(display: display)
         backgroundView = NSView(frame: .zero)
 
         super.init(
@@ -75,7 +77,7 @@ public final class WorkspaceWindow: NSPanel {
     }
 
     deinit {
-        hideTimer?.invalidate()
+        autoHide.cancel()
         removeClickOutsideMonitor()
     }
 
@@ -105,11 +107,9 @@ public final class WorkspaceWindow: NSPanel {
         layoutCompact(animated: false)
         orderFrontRegardless()
 
-        hideTimer?.invalidate()
+        self.autoHide.cancel()
         if autoHide {
-            hideTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { [weak self] _ in
-                self?.fadeOut()
-            }
+            self.autoHide.schedule { [weak self] in self?.fadeOut() }
         }
     }
 
@@ -145,7 +145,7 @@ public final class WorkspaceWindow: NSPanel {
 
     /// Transitions from compact to expanded mode (animated).
     public func expand() {
-        hideTimer?.invalidate()
+        autoHide.cancel()
         display.expand()
 
         ignoresMouseEvents = false
@@ -240,7 +240,7 @@ public final class WorkspaceWindow: NSPanel {
         backgroundView.addSubview(btn)
         closeButton = btn
 
-        // Create item views
+        // Create item views — drag state owned by DragCoordinator
         for (i, ws) in workspaces.enumerated() {
             let item = WorkspaceItemView(workspace: ws, index: i)
             item.isActive = (ws == currentWorkspace)
@@ -251,6 +251,7 @@ public final class WorkspaceWindow: NSPanel {
             }
             item.onDragStart = { [weak self, weak item] in
                 self?.draggingView = item
+                if let idx = item?.index { self?.drag.begin(at: idx) }
             }
             item.onDragMove = { [weak self] pt in
                 self?.handleDragMove(to: pt)
@@ -268,7 +269,7 @@ public final class WorkspaceWindow: NSPanel {
         fadeOut()
     }
 
-    // MARK: - Layout
+    // MARK: - Layout — delegated to WindowLayout (pure geometry)
 
     private func layoutCompact(animated: Bool) {
         guard let screen = NSScreen.main else {
@@ -276,36 +277,25 @@ public final class WorkspaceWindow: NSPanel {
             return
         }
         let visibleFrame = screen.visibleFrame
-
         closeButton?.isHidden = true
 
-        let compact = display.compactLayout
-        let totalWidth = compact.totalWidth
-        let pillWidths = compact.pillWidths
-        let windowHeight = compact.windowHeight
-        let windowFrame = compact.windowFrame(in: visibleFrame)
+        let windowFrame = WindowLayout.compactWindowFrame(display: display, in: visibleFrame)
+        let contentSize = WindowLayout.compactContentSize(display: display)
+        let pillFrames = WindowLayout.compactItemFrames(display: display)
 
         let duration = animated ? 0.25 : 0.0
-
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = duration
             ctx.allowsImplicitAnimation = true
-
             self.animator().setFrame(windowFrame, display: true)
-            self.backgroundView.animator().frame = NSRect(x: 0, y: 0, width: totalWidth, height: windowHeight)
-
-            var xPos: CGFloat = 8
-            let yPos: CGFloat = 8
-
-            for (i, item) in itemViews.enumerated() {
-                guard i < pillWidths.count else { break }
-                item.animator().frame = NSRect(x: xPos, y: yPos, width: pillWidths[i], height: compactHeight)
-                xPos += pillWidths[i] + compactSpacing
+            self.backgroundView.animator().frame = NSRect(
+                x: 0, y: 0, width: contentSize.width, height: contentSize.height)
+            for (i, item) in itemViews.enumerated() where i < pillFrames.count {
+                item.animator().frame = pillFrames[i]
             }
         }
     }
 
-    /// Grid geometry delegated to the display module — single source for every frame.
     private var expandedGrid: GridLayout { display.expandedGrid }
 
     private func layoutExpanded(animated: Bool) {
@@ -314,53 +304,44 @@ public final class WorkspaceWindow: NSPanel {
             return
         }
         let visibleFrame = screen.visibleFrame
-
-        let contentSize = expandedGrid.contentSize
-        let windowWidth = contentSize.width
-        let windowHeight = contentSize.height
-
-        let windowX = visibleFrame.midX - windowWidth / 2
-        let windowY = visibleFrame.midY - windowHeight / 2
+        guard let windowFrame = WindowLayout.expandedWindowFrame(display: display, in: visibleFrame) else { return }
+        let contentSize = WindowLayout.expandedContentSize(display: display)
 
         let duration = animated ? 0.25 : 0.0
-
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = duration
             ctx.allowsImplicitAnimation = true
-
-            self.animator().setFrame(NSRect(x: windowX, y: windowY, width: windowWidth, height: windowHeight), display: true)
-            self.backgroundView.animator().frame = NSRect(x: 0, y: 0, width: windowWidth, height: windowHeight)
-
+            self.animator().setFrame(windowFrame, display: true)
+            self.backgroundView.animator().frame = NSRect(
+                x: 0, y: 0, width: contentSize.width, height: contentSize.height)
             let closeButtonMargin: CGFloat = 12
-            self.closeButton?.frame = NSRect(x: closeButtonMargin, y: windowHeight - closeButtonMargin - 14, width: 14, height: 14)
+            self.closeButton?.frame = NSRect(
+                x: closeButtonMargin, y: contentSize.height - closeButtonMargin - 14, width: 14, height: 14
+            )
             self.closeButton?.isHidden = false
-
             for item in itemViews {
-                item.animator().frame = expandedFrameForIndex(item.index, windowHeight: windowHeight)
+                item.animator().frame = WindowLayout.expandedFrame(
+                    for: item.index, display: display, windowHeight: contentSize.height)
             }
         }
     }
 
     private func expandedFrameForIndex(_ index: Int, windowHeight: CGFloat) -> NSRect {
-        expandedGrid.frame(forIndex: index, windowHeight: windowHeight)
+        WindowLayout.expandedFrame(for: index, display: display, windowHeight: windowHeight)
     }
 
     private func indexForPoint(_ point: NSPoint) -> Int {
-        expandedGrid.index(forPoint: point, windowHeight: backgroundView.bounds.height)
+        WindowLayout.expandedIndex(for: point, display: display, windowHeight: backgroundView.bounds.height)
     }
 
-    // MARK: - Drag Reorder
+    // MARK: - Drag Reorder — delegated to DragCoordinator for state machine
 
     private func handleDragMove(to point: NSPoint) {
-        guard mode == .expanded, let dragging = draggingView else { return }
+        guard mode == .expanded, let dragging = draggingView, drag.isDragging else { return }
 
-        let targetIndex = indexForPoint(point)
-        let currentIndex = dragging.index
+        guard let (newOrder, _) = drag.move(to: point, windowHeight: backgroundView.bounds.height) else { return }
 
-        guard let newOrder = display.reorder(from: currentIndex, to: targetIndex) else { return }
-
-        // O(n) reindex — group views by workspace to avoid O(n²) first(where:) and to stay
-        // stable if duplicate workspace names ever occur.
+        // O(n) reindex handled via coordinator's newOrder
         var viewsByWorkspace: [String: [WorkspaceItemView]] = [:]
         for view in itemViews { viewsByWorkspace[view.workspace, default: []].append(view) }
         for (i, ws) in newOrder.enumerated() {
@@ -373,7 +354,9 @@ public final class WorkspaceWindow: NSPanel {
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.15
             for view in itemViews where view !== dragging {
-                view.animator().frame = expandedFrameForIndex(view.index, windowHeight: backgroundView.bounds.height)
+                view.animator().frame = WindowLayout.expandedFrame(
+                    for: view.index, display: display, windowHeight: backgroundView.bounds.height
+                )
             }
         }
 
@@ -382,12 +365,13 @@ public final class WorkspaceWindow: NSPanel {
 
     private func handleDragEnd() {
         guard let dragging = draggingView else { return }
-
+        let finalIndex = drag.end() ?? dragging.index
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.15
-            dragging.animator().frame = expandedFrameForIndex(dragging.index, windowHeight: backgroundView.bounds.height)
+            dragging.animator().frame = WindowLayout.expandedFrame(
+                for: finalIndex, display: display, windowHeight: backgroundView.bounds.height
+            )
         }
-
         draggingView = nil
     }
 }

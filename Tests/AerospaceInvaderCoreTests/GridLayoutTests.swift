@@ -1,6 +1,7 @@
-@testable import AerospaceInvaderCore
 import CoreGraphics
 import Testing
+
+@testable import AerospaceInvaderCore
 
 @Suite("GridLayout")
 struct GridLayoutTests {
