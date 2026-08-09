@@ -79,7 +79,8 @@ public final class BinaryResolver {
 
     func isWritableByOthers(_ path: String) -> Bool {
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
-              let perms = (attrs[.posixPermissions] as? NSNumber)?.uint16Value else {
+            let perms = (attrs[.posixPermissions] as? NSNumber)?.uint16Value
+        else {
             return true
         }
         return (perms & 0o022) != 0

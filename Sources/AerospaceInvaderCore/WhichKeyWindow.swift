@@ -92,17 +92,19 @@ public final class WhichKeyWindow: NSPanel {
 
         let selfPointer = Unmanaged.passUnretained(self).toOpaque()
 
-        let eventMask: CGEventMask = (1 << CGEventType.leftMouseDown.rawValue) |
-            (1 << CGEventType.rightMouseDown.rawValue)
+        let eventMask: CGEventMask =
+            (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.rightMouseDown.rawValue)
 
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .listenOnly,
-            eventsOfInterest: eventMask,
-            callback: callback,
-            userInfo: selfPointer
-        ) else {
+        guard
+            let tap = CGEvent.tapCreate(
+                tap: .cgSessionEventTap,
+                place: .headInsertEventTap,
+                options: .listenOnly,
+                eventsOfInterest: eventMask,
+                callback: callback,
+                userInfo: selfPointer
+            )
+        else {
             fputs("Failed to create event tap — accessibility permissions may be required\n", stderr)
             return
         }
@@ -151,7 +153,8 @@ public final class WhichKeyWindow: NSPanel {
         for g in groups { totalLines += g.items.count }
 
         let width: CGFloat = 360
-        let height = titleHeight + CGFloat(totalLines) * lineHeight + CGFloat(groups.count) * (headerHeight + 8) + padding * 2
+        let height =
+            titleHeight + CGFloat(totalLines) * lineHeight + CGFloat(groups.count) * (headerHeight + 8) + padding * 2
 
         guard let screen = NSScreen.main else {
             fputs("WhichKeyWindow: no main screen available for layout\n", stderr)
@@ -179,7 +182,8 @@ public final class WhichKeyWindow: NSPanel {
         contentView?.addSubview(title)
 
         // Separator
-        let sep = NSView(frame: NSRect(x: padding, y: height - padding - titleHeight, width: width - padding * 2, height: 1))
+        let sep = NSView(
+            frame: NSRect(x: padding, y: height - padding - titleHeight, width: width - padding * 2, height: 1))
         sep.wantsLayer = true
         sep.layer?.backgroundColor = Style.separatorColor.cgColor
         contentView?.addSubview(sep)

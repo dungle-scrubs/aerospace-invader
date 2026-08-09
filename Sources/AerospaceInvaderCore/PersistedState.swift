@@ -143,10 +143,12 @@ public final class PersistedState {
         var seen = Set<String>()
         var result: [String] = []
         for ws in saved where currentSet.contains(ws) && !seen.contains(ws) {
-            result.append(ws); seen.insert(ws)
+            result.append(ws)
+            seen.insert(ws)
         }
         for ws in current where !seen.contains(ws) {
-            result.append(ws); seen.insert(ws)
+            result.append(ws)
+            seen.insert(ws)
         }
         return result
     }

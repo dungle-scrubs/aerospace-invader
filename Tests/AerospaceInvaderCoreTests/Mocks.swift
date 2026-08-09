@@ -1,5 +1,6 @@
-@testable import AerospaceInvaderCore
 import Foundation
+
+@testable import AerospaceInvaderCore
 
 // MARK: - Mock AerospaceCommandExecutor
 

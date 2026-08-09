@@ -1,6 +1,7 @@
-@testable import AerospaceInvaderCore
 import Foundation
 import Testing
+
+@testable import AerospaceInvaderCore
 
 @Suite("WorkspaceNavigator", .serialized)
 struct WorkspaceNavigatorTests {
@@ -91,7 +92,7 @@ struct WorkspaceNavigatorTests {
         let order = MockOrderProvider()
         order.savedOrder = ["A", "B", "C"]
         let navigator = WorkspaceNavigator(api: api, orderProvider: order)
-        navigator.resetForTesting() // empty cache → exercises the background populate-then-navigate branch
+        navigator.resetForTesting()  // empty cache → exercises the background populate-then-navigate branch
 
         let current = await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
             navigator.forward { _, current in
@@ -261,7 +262,7 @@ struct WorkspaceNavigatorTests {
         navigator.refreshCache()
 
         let (_, focused, previous) = navigator.getStateForTesting()
-        #expect(focused == "C") // optimistic focus preserved, not reverted to the stale B
+        #expect(focused == "C")  // optimistic focus preserved, not reverted to the stale B
         #expect(previous == "B")
     }
 

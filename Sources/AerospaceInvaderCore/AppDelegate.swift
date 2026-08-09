@@ -55,7 +55,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             navigator: navigator,
             orderProvider: orderProvider,
             hotkeyManager: hotkeyManager,
-            isDaemon: { false }, // placeholder — will be replaced after super.init so it can capture self
+            isDaemon: { false },  // placeholder — will be replaced after super.init so it can capture self
             windowFactory: windowFactory,
             whichKeyFactory: whichKeyFactory
         )
@@ -79,11 +79,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Single seam: AppMode → UserIntent → Session.execute
         switch mode {
-        case .daemon:   session.execute(.runDaemon)
-        case .tabs:     session.execute(.showTabs)
-        case .expand:   session.execute(.showExpanded)
+        case .daemon: session.execute(.runDaemon)
+        case .tabs: session.execute(.showTabs)
+        case .expand: session.execute(.showExpanded)
         case .whichkey: session.execute(.whichKey(mode: modeArg ?? "service"))
-        case .hide:     session.execute(.hide)
+        case .hide: session.execute(.hide)
         }
     }
 
@@ -131,10 +131,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
 // MARK: - Session isDaemon rebinding
 
-private extension Session {
+extension Session {
     /// Replace the isDaemon provider after initialization. AppDelegate needs this because
     /// the provider must capture `self.isDaemon` which isn't available until after `super.init`.
-    func replaceIsDaemonProvider(_ provider: @escaping () -> Bool) {
+    fileprivate func replaceIsDaemonProvider(_ provider: @escaping () -> Bool) {
         // Session stores the closure in a private let; use reflection via a dedicated update
         // method rather than exposing the closure. We add this as a private extension to avoid
         // making the property internal.

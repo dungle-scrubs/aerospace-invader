@@ -7,7 +7,10 @@ public final class HotkeyManager {
     /// Identifies which navigation action a registered hotkey triggers, and owns
     /// each action's id, log label, and which `Config` binding drives it.
     private enum HotkeyAction: UInt32, CaseIterable {
-        case back = 1, forward = 2, expand = 3, toggle = 4
+        case back = 1
+        case forward = 2
+        case expand = 3
+        case toggle = 4
 
         /// Human-readable role, used in the registration log line.
         var label: String {
@@ -73,8 +76,9 @@ public final class HotkeyManager {
             let manager = Unmanaged<HotkeyManager>.fromOpaque(userData).takeUnretainedValue()
 
             var hotkeyID = EventHotKeyID()
-            GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
-                              nil, MemoryLayout<EventHotKeyID>.size, nil, &hotkeyID)
+            GetEventParameter(
+                event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                nil, MemoryLayout<EventHotKeyID>.size, nil, &hotkeyID)
 
             let now = ProcessInfo.processInfo.systemUptime
 
@@ -127,7 +131,7 @@ public final class HotkeyManager {
             return
         }
         let modifiers = ConfigManager.modifierMask(for: config.modifiers)
-        let hotkeyID = EventHotKeyID(signature: OSType(0x4B565354), id: id)
+        let hotkeyID = EventHotKeyID(signature: OSType(0x4B56_5354), id: id)
         var hotkeyRef: EventHotKeyRef?
         RegisterEventHotKey(keyCode, modifiers, hotkeyID, GetApplicationEventTarget(), 0, &hotkeyRef)
         hotkeyRefs.append(hotkeyRef)

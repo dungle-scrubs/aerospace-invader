@@ -1,6 +1,7 @@
-@testable import AerospaceInvaderCore
 import Foundation
 import Testing
+
+@testable import AerospaceInvaderCore
 
 @Suite("ConfigManager")
 struct ConfigManagerTests {
@@ -10,13 +11,13 @@ struct ConfigManagerTests {
     @Test("load config from valid JSON")
     func loadConfigFromValidJSON() {
         let jsonString = """
-        {
-            "back": { "key": "h", "modifiers": ["command"] },
-            "forward": { "key": "l", "modifiers": ["command"] },
-            "expand": { "key": "space", "modifiers": ["option"] },
-            "toggle": { "key": "p", "modifiers": ["option"] }
-        }
-        """
+            {
+                "back": { "key": "h", "modifiers": ["command"] },
+                "forward": { "key": "l", "modifiers": ["command"] },
+                "expand": { "key": "space", "modifiers": ["option"] },
+                "toggle": { "key": "p", "modifiers": ["option"] }
+            }
+            """
         let json = Data(jsonString.utf8)
 
         let config = ConfigManager.loadConfig(from: json)
@@ -43,10 +44,10 @@ struct ConfigManagerTests {
         // specified binding and fall back to defaults for everything else, rather than discarding
         // the whole config — so adding a field or writing a partial config never resets bindings.
         let jsonString = """
-        {
-            "back": { "key": "h" }
-        }
-        """
+            {
+                "back": { "key": "h" }
+            }
+            """
         let json = Data(jsonString.utf8)
 
         let config = ConfigManager.loadConfig(from: json)
@@ -63,10 +64,10 @@ struct ConfigManagerTests {
         // A present-but-malformed binding (missing the required `key`) is a real error, not a
         // forward-compat gap, so it must not silently succeed.
         let jsonString = """
-        {
-            "back": { "modifiers": ["option"] }
-        }
-        """
+            {
+                "back": { "modifiers": ["option"] }
+            }
+            """
         let json = Data(jsonString.utf8)
 
         #expect(ConfigManager.loadConfig(from: json) == nil)
@@ -75,13 +76,13 @@ struct ConfigManagerTests {
     @Test("load config with all modifiers")
     func loadConfigWithAllModifiers() {
         let jsonString = """
-        {
-            "back": { "key": "h", "modifiers": ["command", "shift", "option", "control"] },
-            "forward": { "key": "l", "modifiers": ["command"] },
-            "expand": { "key": "space", "modifiers": ["option"] },
-            "toggle": { "key": "p", "modifiers": ["option"] }
-        }
-        """
+            {
+                "back": { "key": "h", "modifiers": ["command", "shift", "option", "control"] },
+                "forward": { "key": "l", "modifiers": ["command"] },
+                "expand": { "key": "space", "modifiers": ["option"] },
+                "toggle": { "key": "p", "modifiers": ["option"] }
+            }
+            """
         let json = Data(jsonString.utf8)
 
         let config = ConfigManager.loadConfig(from: json)
