@@ -7,12 +7,27 @@ public final class WorkspaceWindow: NSPanel {
     /// Display mode for the window.
     public enum Mode { case compact, expanded }
 
-    /// Ordered workspace names currently displayed.
-    public var workspaces: [String] = []
-    /// Name of the currently focused workspace.
-    public var currentWorkspace: String?
-    /// Whether the window is in compact or expanded mode.
-    public var mode: Mode = .compact
+    /// Deep display module that owns ordering, focus, mode, and every frame. The window
+    /// is a thin adapter that renders the display's state and forwards intents back into it.
+    public let display: WorkspaceDisplay
+
+    /// Ordered workspace names currently displayed. Proxies to `display.state`.
+    public var workspaces: [String] {
+        get { display.state.workspaces }
+        set { display.update(workspaces: newValue, focused: display.state.focused) }
+    }
+    /// Name of the currently focused workspace. Proxies to `display.state`.
+    public var currentWorkspace: String? {
+        get { display.state.focused }
+        set { display.update(workspaces: display.state.workspaces, focused: newValue) }
+    }
+    /// Whether the window is in compact or expanded mode. Proxies to `display.state`.
+    public var mode: Mode {
+        get { display.state.mode }
+        set {
+            if newValue == .expanded { display.expand() } else { display.collapse() }
+        }
+    }
 
     /// Called when the user selects a workspace (click/tap).
     public var onSelectWorkspace: ((String) -> Void)?
@@ -31,18 +46,20 @@ public final class WorkspaceWindow: NSPanel {
     private var draggingView: WorkspaceItemView?
     private var clickOutsideMonitor: Any?
 
-    // Compact layout constants
-    private let compactHeight: CGFloat = 28
-    private let compactPadding: CGFloat = 10
-    private let compactSpacing: CGFloat = 4
+    // Layout is now centralized in WorkspaceDisplay.LayoutConfig; these remain as
+    // convenience accessors so existing layout code need not change shape.
+    private var compactHeight: CGFloat { display.config.compactHeight }
+    private var compactPadding: CGFloat { display.config.compactPadding }
+    private var compactSpacing: CGFloat { display.config.compactSpacing }
+    private var expandedItemSize: CGFloat { display.config.expandedItemSize }
+    private var expandedSpacing: CGFloat { display.config.expandedSpacing }
+    private var expandedPadding: CGFloat { display.config.expandedPadding }
+    private var expandedHeaderHeight: CGFloat { display.config.expandedHeaderHeight }
 
-    // Expanded layout constants
-    private let expandedItemSize: CGFloat = 100
-    private let expandedSpacing: CGFloat = 12
-    private let expandedPadding: CGFloat = 20
-    private let expandedHeaderHeight: CGFloat = 28
-
-    public init() {
+    /// Creates a window backed by the given display. When no display is provided a
+    /// default one is created so existing call sites remain unbroken.
+    public init(display: WorkspaceDisplay = WorkspaceDisplay()) {
+        self.display = display
         backgroundView = NSView(frame: .zero)
 
         super.init(
@@ -52,15 +69,9 @@ public final class WorkspaceWindow: NSPanel {
             defer: false
         )
 
-        isFloatingPanel = true
+        OverlayShell.configure(self)
         level = .floating
-        backgroundColor = .clear
-        isOpaque = false
-        hasShadow = true
-        isMovableByWindowBackground = false
-        hidesOnDeactivate = false
         ignoresMouseEvents = true
-        collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
     }
 
     deinit {
@@ -87,9 +98,8 @@ public final class WorkspaceWindow: NSPanel {
     ///   - current: The currently focused workspace name.
     ///   - autoHide: Whether the window auto-hides after 1.5 seconds.
     public func show(workspaces: [String], current: String?, autoHide: Bool = true) {
-        self.workspaces = workspaces
-        self.currentWorkspace = current
-        self.mode = .compact
+        display.update(workspaces: workspaces, focused: current)
+        display.collapse()
 
         rebuildViews()
         layoutCompact(animated: false)
@@ -108,9 +118,8 @@ public final class WorkspaceWindow: NSPanel {
     ///   - workspaces: Ordered workspace names.
     ///   - current: The currently focused workspace name.
     public func showExpanded(workspaces: [String], current: String?) {
-        self.workspaces = workspaces
-        self.currentWorkspace = current
-        self.mode = .expanded
+        display.update(workspaces: workspaces, focused: current)
+        display.expand()
 
         ignoresMouseEvents = false
         level = .popUpMenu
@@ -137,7 +146,7 @@ public final class WorkspaceWindow: NSPanel {
     /// Transitions from compact to expanded mode (animated).
     public func expand() {
         hideTimer?.invalidate()
-        mode = .expanded
+        display.expand()
 
         ignoresMouseEvents = false
         level = .popUpMenu
@@ -155,7 +164,7 @@ public final class WorkspaceWindow: NSPanel {
     /// Transitions from expanded back to compact mode (animated).
     public func collapse() {
         removeClickOutsideMonitor()
-        mode = .compact
+        display.collapse()
 
         ignoresMouseEvents = true
         level = .floating
@@ -169,45 +178,33 @@ public final class WorkspaceWindow: NSPanel {
         onCollapse?()
     }
 
-    /// Fades the window out and resets to compact state.
+    /// Fades the window out and resets to compact state. Delegates animation to
+    /// `OverlayShell` so both overlays share one fade path.
     public func fadeOut() {
         removeClickOutsideMonitor()
-
         ignoresMouseEvents = true
         level = .floating
-
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.2
-            self.animator().alphaValue = 0
-        }, completionHandler: {
-            self.orderOut(nil)
-            self.alphaValue = 1
-            self.mode = .compact
-            for item in self.itemViews {
-                item.isExpanded = false
-            }
+        OverlayShell.fadeOut(self, duration: 0.2) { [weak self] in
+            guard let self = self else { return }
+            self.display.collapse()
+            for item in self.itemViews { item.isExpanded = false }
             self.onDismiss?()
-        })
+        }
     }
 
     // MARK: - Click Outside Monitor
 
     private func installClickOutsideMonitor() {
         removeClickOutsideMonitor()
-        clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+        clickOutsideMonitor = OverlayShell.installClickOutsideMonitor(for: self) { [weak self] in
             guard let self = self, self.mode == .expanded else { return }
-            let screenLoc = NSEvent.mouseLocation
-            if !self.frame.contains(screenLoc) {
-                self.fadeOut()
-            }
+            self.fadeOut()
         }
     }
 
     private func removeClickOutsideMonitor() {
-        if let monitor = clickOutsideMonitor {
-            NSEvent.removeMonitor(monitor)
-            clickOutsideMonitor = nil
-        }
+        OverlayShell.removeMonitor(clickOutsideMonitor)
+        clickOutsideMonitor = nil
     }
 
     // MARK: - View Hierarchy
@@ -222,10 +219,10 @@ public final class WorkspaceWindow: NSPanel {
         // Create background
         backgroundView = NSView(frame: .zero)
         backgroundView.wantsLayer = true
-        backgroundView.layer?.backgroundColor = Style.bgColor.cgColor
-        backgroundView.layer?.cornerRadius = 8
-        backgroundView.layer?.borderColor = Style.windowBorderColor.cgColor
-        backgroundView.layer?.borderWidth = 1
+        backgroundView.layer?.backgroundColor = Style.Overlay.background.cgColor
+        backgroundView.layer?.cornerRadius = Style.Overlay.cornerRadius
+        backgroundView.layer?.borderColor = Style.Overlay.border.cgColor
+        backgroundView.layer?.borderWidth = Style.Overlay.borderWidth
 
         contentView = backgroundView
 
@@ -282,19 +279,11 @@ public final class WorkspaceWindow: NSPanel {
 
         closeButton?.isHidden = true
 
-        // Calculate pill widths
-        var totalWidth: CGFloat = 16
-        let pillWidths: [CGFloat] = workspaces.map { ws in
-            let textWidth = (ws as NSString).size(withAttributes: [.font: Style.font]).width
-            let width = textWidth + compactPadding * 2
-            totalWidth += width + compactSpacing
-            return width
-        }
-        totalWidth += 8
-
-        let windowHeight: CGFloat = compactHeight + 16
-        let windowX = visibleFrame.midX - totalWidth / 2
-        let windowY = visibleFrame.maxY - windowHeight - 8
+        let compact = display.compactLayout
+        let totalWidth = compact.totalWidth
+        let pillWidths = compact.pillWidths
+        let windowHeight = compact.windowHeight
+        let windowFrame = compact.windowFrame(in: visibleFrame)
 
         let duration = animated ? 0.25 : 0.0
 
@@ -302,7 +291,7 @@ public final class WorkspaceWindow: NSPanel {
             ctx.duration = duration
             ctx.allowsImplicitAnimation = true
 
-            self.animator().setFrame(NSRect(x: windowX, y: windowY, width: totalWidth, height: windowHeight), display: true)
+            self.animator().setFrame(windowFrame, display: true)
             self.backgroundView.animator().frame = NSRect(x: 0, y: 0, width: totalWidth, height: windowHeight)
 
             var xPos: CGFloat = 8
@@ -316,16 +305,8 @@ public final class WorkspaceWindow: NSPanel {
         }
     }
 
-    /// Grid geometry for the current workspace count in expanded mode.
-    private var expandedGrid: GridLayout {
-        GridLayout(
-            itemCount: workspaces.count,
-            itemSize: expandedItemSize,
-            spacing: expandedSpacing,
-            padding: expandedPadding,
-            headerHeight: expandedHeaderHeight
-        )
-    }
+    /// Grid geometry delegated to the display module — single source for every frame.
+    private var expandedGrid: GridLayout { display.expandedGrid }
 
     private func layoutExpanded(animated: Bool) {
         guard let screen = NSScreen.main, !workspaces.isEmpty else {
@@ -376,17 +357,17 @@ public final class WorkspaceWindow: NSPanel {
         let targetIndex = indexForPoint(point)
         let currentIndex = dragging.index
 
-        guard targetIndex != currentIndex,
-              targetIndex < workspaces.count,
-              currentIndex < workspaces.count else { return }
+        guard let newOrder = display.reorder(from: currentIndex, to: targetIndex) else { return }
 
-        let item = workspaces.remove(at: currentIndex)
-        workspaces.insert(item, at: targetIndex)
-
-        for (i, ws) in workspaces.enumerated() {
-            if let view = itemViews.first(where: { $0.workspace == ws }) {
-                view.index = i
-            }
+        // O(n) reindex — group views by workspace to avoid O(n²) first(where:) and to stay
+        // stable if duplicate workspace names ever occur.
+        var viewsByWorkspace: [String: [WorkspaceItemView]] = [:]
+        for view in itemViews { viewsByWorkspace[view.workspace, default: []].append(view) }
+        for (i, ws) in newOrder.enumerated() {
+            guard var queue = viewsByWorkspace[ws], !queue.isEmpty else { continue }
+            let view = queue.removeFirst()
+            viewsByWorkspace[ws] = queue
+            view.index = i
         }
 
         NSAnimationContext.runAnimationGroup { ctx in

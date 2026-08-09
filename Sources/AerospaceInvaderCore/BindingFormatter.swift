@@ -8,10 +8,9 @@ enum BindingCategory: String, CaseIterable {
     case exit = "Exit"
 }
 
-/// Pure formatting and categorization for AeroSpace mode bindings. Extracted from the which-key
-/// view so this domain knowledge (which commands are which category, how keys/commands render)
-/// lives outside AppKit and can be unit-tested. Modifier glyphs reuse `Modifier` so the app has
-/// a single source of truth for `alt → ⌥` and friends.
+/// Pure formatting and categorization for AeroSpace mode bindings. Now a thin façade over
+/// `KeyLexicon` for key glyphs — the deep module that owns every `alt → ⌥` mapping — so
+/// hotkey registration and which-key display share one table.
 enum BindingFormatter {
     /// A named group of bindings for display.
     struct Group {
@@ -19,14 +18,8 @@ enum BindingFormatter {
         let items: [(key: String, cmd: String)]
     }
 
-    /// Non-modifier key names that render as a symbol.
-    private static let specialKeys: [String: String] = [
-        "backspace": "⌫",
-        "esc": "Esc",
-        "semicolon": ";",
-        "comma": ",",
-        "slash": "/"
-    ]
+    /// Non-modifier key names that render as a symbol. Forwards to `KeyLexicon` — one table.
+    private static let specialKeys: [String: String] = KeyLexicon.specialKeySymbols
 
     /// Command simplifications applied for display, in order.
     private static let cmdReplacements: [(from: String, to: String)] = [
@@ -66,12 +59,9 @@ enum BindingFormatter {
     }
 
     /// Converts a raw AeroSpace key string (e.g. `alt-shift-h`) to readable symbols (`⌥⇧H`).
+    /// Forwards to `KeyLexicon` so hotkey and which-key share one implementation.
     static func formatKey(_ key: String) -> String {
-        let tokens = key.split(separator: "-").map(String.init)
-        guard let last = tokens.last else { return key }
-        let modifiers = tokens.dropLast().compactMap { Modifier(name: $0)?.symbol }.joined()
-        let keyPart = specialKeys[last] ?? last
-        return modifiers + keyPart
+        KeyLexicon.formatKey(key)
     }
 
     /// Simplifies a raw AeroSpace command string for display.
