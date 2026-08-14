@@ -48,7 +48,7 @@ jobs:
           echo "x86_64_sha=$X86_SHA" >> $GITHUB_OUTPUT
 
       - name: Upload binaries to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event.release.tag_name }}
           append_body: true
