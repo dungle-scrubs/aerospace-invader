@@ -10,7 +10,8 @@
 
 2. Install dependencies
    ```bash
-   brew install swiftlint swift-format
+   brew install swiftlint swift-format lefthook trufflehog
+   lefthook install
    ```
 
 3. Build and run
