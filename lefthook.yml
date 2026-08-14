@@ -1,0 +1,16 @@
+# Lefthook - Git hooks manager
+# https://github.com/evilmartians/lefthook
+# Install: brew install lefthook && lefthook install
+
+pre-commit:
+  parallel: true
+  commands:
+    swiftlint:
+      run: swiftlint lint --strict
+    swift-format:
+      run: swift-format lint -r Sources Tests
+
+pre-push:
+  commands:
+    trufflehog:
+      run: trufflehog git file://. --only-verified --fail

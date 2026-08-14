@@ -22,6 +22,7 @@ DerivedData/
 .build/
 Packages/
 Package.resolved
-CLAUDE.md
-AGENT.md
-bottle/
+
+# Agent local - private, untracked
+AGENTS.local.md
+CLAUDE.local.md
