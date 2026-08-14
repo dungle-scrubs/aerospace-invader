@@ -23,7 +23,7 @@ jobs:
           tar -czvf aerospace-invader-darwin-${{ matrix.arch }}.tar.gz -C dist aerospace-invader
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aerospace-invader-darwin-${{ matrix.arch }}
           path: aerospace-invader-darwin-${{ matrix.arch }}.tar.gz
