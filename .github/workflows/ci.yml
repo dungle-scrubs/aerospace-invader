@@ -1,5 +1,14 @@
 name: CI
-on: [push, pull_request]
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cost control: cancel superseded runs on the same branch/PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 # Least privilege: CI only needs to read the checkout. The secrets-scan job below grants
 # itself nothing extra — gitleaks scans the working tree with read-only access.
