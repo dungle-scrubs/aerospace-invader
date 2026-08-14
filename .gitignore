@@ -26,3 +26,8 @@ Package.resolved
 # Agent local - private, untracked
 AGENTS.local.md
 CLAUDE.local.md
+
+# Env / secrets - never commit real credentials
+.env
+.env.*
+!.env.example
