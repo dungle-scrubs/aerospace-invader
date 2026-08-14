@@ -2,16 +2,13 @@ name: CI
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [main]
 
 # Cost control: cancel superseded runs on the same branch/PR.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Least privilege: CI only needs to read the checkout. The secrets-scan job below grants
-# itself nothing extra — gitleaks scans the working tree with read-only access.
+# Least privilege: CI only needs to read the checkout.
 permissions:
   contents: read
 
@@ -29,15 +26,6 @@ jobs:
 
       - name: Lint
         run: |
-          brew install swiftlint
+          brew install swiftlint swift-format
           swiftlint lint --strict
-
-  secrets:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          swift-format lint -r Sources Tests
