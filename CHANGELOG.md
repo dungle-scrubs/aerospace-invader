@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0](https://github.com/dungle-scrubs/aerospace-invader/compare/v0.2.1...v0.3.0) (2026-08-14)
+
+
+### Features
+
+* **core:** add deep modules for architecture review (candidates 01-05) ([715a1f2](https://github.com/dungle-scrubs/aerospace-invader/commit/715a1f2338455d1c8ea0d560b1e82c19dbe1dd7c))
+* **formula:** add arm64_sonoma bottle ([4458759](https://github.com/dungle-scrubs/aerospace-invader/commit/445875913d9dd01e42867d2a801aa09a15dac5c5))
+
+
+### Bug Fixes
+
+* **hotkey:** add debouncing and signal handlers ([c793cc1](https://github.com/dungle-scrubs/aerospace-invader/commit/c793cc1edf031329ed625c17e172856b2ca08580))
+* **managers:** add thread safety, error logging, protocol conformance ([6e192f1](https://github.com/dungle-scrubs/aerospace-invader/commit/6e192f11102905708811058676388dc730ac9a69))
+* resolve concurrency, lifecycle, and safety findings from codebase audit ([feddb90](https://github.com/dungle-scrubs/aerospace-invader/commit/feddb905258a1ea386fb3c972f6a09ce13dc7fb0))
+* **ui:** remove IUOs, add deinit cleanup, fix force unwraps ([b9754dc](https://github.com/dungle-scrubs/aerospace-invader/commit/b9754dc3822def8ac5ebcb8356cd0fd01bf97e38))
+
 ## [Unreleased]
 
 ## [0.2.1] - 2026-01-18
