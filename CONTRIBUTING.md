@@ -36,6 +36,21 @@
 - Run `make lint` before committing
 - Run `make format` to auto-format code
 
+## Commit Messages
+
+This project uses [Release Please](https://github.com/googleapis/release-please) and
+[Conventional Commits](https://www.conventionalcommits.org/) to generate the
+changelog and version bumps. Use these prefixes:
+
+- `feat:` - new feature (minor bump pre-1.0, patch post-1.0 per config)
+- `fix:` - bug fix (patch)
+- `perf:` / `refactor:` / `deps:` - changed behavior (patch)
+- `docs:` - documentation only
+- `chore:` / `ci:` / `test:` - maintenance (no release notes)
+
+Examples: `feat: add drag-to-reorder`, `fix: handle nil workspace`.
+Breaking changes use `feat!:` or `fix!:` with `BREAKING CHANGE:` footer.
+
 ## Testing
 
 The tests use the [Swift Testing](https://developer.apple.com/documentation/testing) framework,
