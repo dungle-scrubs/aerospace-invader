@@ -14,7 +14,8 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-latest
+    # Swift build/test/lint of a macOS target: runs on the self-hosted runner on mini (ticket #18)
+    runs-on: [self-hosted, macos]
     steps:
       - uses: actions/checkout@v4
 
