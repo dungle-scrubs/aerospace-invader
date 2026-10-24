@@ -6,7 +6,8 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    # Release builds of a macOS binary: self-hosted runner on mini (ticket #18)
+    runs-on: [self-hosted, macos]
     strategy:
       matrix:
         arch: [arm64, x86_64]
